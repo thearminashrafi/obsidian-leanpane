@@ -1,0 +1,76 @@
+[
+  {
+    "children": [
+      {
+        "kind": 6,
+        "name": "and_swap",
+        "range": {
+          "end": {
+            "character": 12,
+            "line": 6
+          },
+          "start": {
+            "character": 0,
+            "line": 2
+          }
+        },
+        "selectionRange": {
+          "end": {
+            "character": 16,
+            "line": 3
+          },
+          "start": {
+            "character": 8,
+            "line": 3
+          }
+        }
+      },
+      {
+        "kind": 6,
+        "name": "add_comm_three",
+        "range": {
+          "end": {
+            "character": 9,
+            "line": 14
+          },
+          "start": {
+            "character": 0,
+            "line": 8
+          }
+        },
+        "selectionRange": {
+          "end": {
+            "character": 22,
+            "line": 8
+          },
+          "start": {
+            "character": 8,
+            "line": 8
+          }
+        }
+      }
+    ],
+    "kind": 3,
+    "name": "StatusProj",
+    "range": {
+      "end": {
+        "character": 14,
+        "line": 16
+      },
+      "start": {
+        "character": 0,
+        "line": 0
+      }
+    },
+    "selectionRange": {
+      "end": {
+        "character": 20,
+        "line": 0
+      },
+      "start": {
+        "character": 10,
+        "line": 0
+      }
+    }
+  }
+]

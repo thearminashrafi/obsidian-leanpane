@@ -1,0 +1,33 @@
+import { loadRenderInfoview } from "@leanprover/infoview/loader";
+const log = (m: string) => parent.postMessage({ type: "log", m }, "*");
+window.addEventListener("error", (e) => log("ERR " + e.message));
+window.addEventListener("unhandledrejection", (e) => log("REJ " + String((e as any).reason)));
+window.addEventListener("message", async (ev) => {
+  const d = ev.data;
+  if (d?.type !== "init") return;
+  const blob = (s: string) => URL.createObjectURL(new Blob([s], { type: "text/javascript" }));
+  const imports = {
+    "@leanprover/infoview": blob(d.a.infoviewJs),
+    react: blob(d.a.reactJs),
+    "react/jsx-runtime": blob(d.a.jsxRuntimeJs),
+    "react-dom": blob(d.a.reactDomJs),
+  };
+  const st = document.createElement("style"); st.textContent = d.a.css; document.head.append(st);
+  const calls: string[] = [];
+  const noop = (name: string, ret: any = undefined) => async (..._a: any[]) => { calls.push(name); return ret; };
+  const editorApi: any = {
+    saveConfig: noop("saveConfig"), sendClientRequest: noop("sendClientRequest", null), sendClientNotification: noop("sendClientNotification"),
+    subscribeServerNotifications: noop("subServer"), unsubscribeServerNotifications: noop("unsubServer"),
+    subscribeClientNotifications: noop("subClient"), unsubscribeClientNotifications: noop("unsubClient"),
+    copyToClipboard: noop("copy"), insertText: noop("insert"), applyEdit: noop("applyEdit"), showDocument: noop("showDoc"),
+    restartFile: noop("restart"), createRpcSession: noop("createRpc", "sess1"), closeRpcSession: noop("closeRpc"),
+  };
+  const root = document.getElementById("react_root")!;
+  loadRenderInfoview(imports, [editorApi, root] as any, async (api: any) => {
+    log("render callback; api keys=" + Object.keys(api).join(","));
+    await api.serverRestarted({ capabilities: {}, serverInfo: { name: "Lean 4 server", version: "4.25.1" } });
+    await api.initialize({ uri: "file:///a.lean", range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } } });
+    setTimeout(() => log("DOM: " + root.innerText.slice(0, 200).replace(/\n/g, " | ") + " calls=" + calls.join(",")), 800);
+  });
+});
+parent.postMessage({ type: "ready" }, "*");

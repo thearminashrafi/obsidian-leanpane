@@ -1,0 +1,52 @@
+[
+  {
+    "fullRange": {
+      "end": {
+        "character": 6,
+        "line": 4
+      },
+      "start": {
+        "character": 0,
+        "line": 4
+      }
+    },
+    "message": "StatusProj.double (n : Nat) : Nat",
+    "range": {
+      "end": {
+        "character": 6,
+        "line": 4
+      },
+      "start": {
+        "character": 0,
+        "line": 4
+      }
+    },
+    "severity": 3,
+    "source": "Lean 4"
+  },
+  {
+    "fullRange": {
+      "end": {
+        "character": 5,
+        "line": 5
+      },
+      "start": {
+        "character": 0,
+        "line": 5
+      }
+    },
+    "message": "42",
+    "range": {
+      "end": {
+        "character": 5,
+        "line": 5
+      },
+      "start": {
+        "character": 0,
+        "line": 5
+      }
+    },
+    "severity": 3,
+    "source": "Lean 4"
+  }
+]

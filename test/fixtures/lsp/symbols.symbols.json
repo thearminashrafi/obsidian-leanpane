@@ -1,0 +1,272 @@
+[
+  {
+    "children": [
+      {
+        "children": [
+          {
+            "kind": 6,
+            "name": "thm",
+            "range": {
+              "end": {
+                "character": 29,
+                "line": 3
+              },
+              "start": {
+                "character": 0,
+                "line": 3
+              }
+            },
+            "selectionRange": {
+              "end": {
+                "character": 11,
+                "line": 3
+              },
+              "start": {
+                "character": 8,
+                "line": 3
+              }
+            }
+          },
+          {
+            "kind": 6,
+            "name": "Foo.bar",
+            "range": {
+              "end": {
+                "character": 33,
+                "line": 4
+              },
+              "start": {
+                "character": 0,
+                "line": 4
+              }
+            },
+            "selectionRange": {
+              "end": {
+                "character": 15,
+                "line": 4
+              },
+              "start": {
+                "character": 8,
+                "line": 4
+              }
+            }
+          }
+        ],
+        "kind": 3,
+        "name": "B",
+        "range": {
+          "end": {
+            "character": 5,
+            "line": 5
+          },
+          "start": {
+            "character": 0,
+            "line": 2
+          }
+        },
+        "selectionRange": {
+          "end": {
+            "character": 11,
+            "line": 2
+          },
+          "start": {
+            "character": 10,
+            "line": 2
+          }
+        }
+      },
+      {
+        "children": [
+          {
+            "kind": 6,
+            "name": "inner",
+            "range": {
+              "end": {
+                "character": 18,
+                "line": 9
+              },
+              "start": {
+                "character": 0,
+                "line": 9
+              }
+            },
+            "selectionRange": {
+              "end": {
+                "character": 9,
+                "line": 9
+              },
+              "start": {
+                "character": 4,
+                "line": 9
+              }
+            }
+          }
+        ],
+        "kind": 3,
+        "name": "Helpers",
+        "range": {
+          "end": {
+            "character": 11,
+            "line": 10
+          },
+          "start": {
+            "character": 0,
+            "line": 7
+          }
+        },
+        "selectionRange": {
+          "end": {
+            "character": 15,
+            "line": 7
+          },
+          "start": {
+            "character": 8,
+            "line": 7
+          }
+        }
+      },
+      {
+        "kind": 6,
+        "name": "Pt",
+        "range": {
+          "end": {
+            "character": 9,
+            "line": 14
+          },
+          "start": {
+            "character": 0,
+            "line": 12
+          }
+        },
+        "selectionRange": {
+          "end": {
+            "character": 12,
+            "line": 12
+          },
+          "start": {
+            "character": 10,
+            "line": 12
+          }
+        }
+      },
+      {
+        "kind": 6,
+        "name": "Color",
+        "range": {
+          "end": {
+            "character": 15,
+            "line": 17
+          },
+          "start": {
+            "character": 0,
+            "line": 16
+          }
+        },
+        "selectionRange": {
+          "end": {
+            "character": 15,
+            "line": 16
+          },
+          "start": {
+            "character": 10,
+            "line": 16
+          }
+        }
+      },
+      {
+        "kind": 6,
+        "name": "instance : Inhabited Color ",
+        "range": {
+          "end": {
+            "character": 36,
+            "line": 19
+          },
+          "start": {
+            "character": 0,
+            "line": 19
+          }
+        },
+        "selectionRange": {
+          "end": {
+            "character": 26,
+            "line": 19
+          },
+          "start": {
+            "character": 9,
+            "line": 19
+          }
+        }
+      },
+      {
+        "kind": 6,
+        "name": "_root_.top_level",
+        "range": {
+          "end": {
+            "character": 42,
+            "line": 21
+          },
+          "start": {
+            "character": 0,
+            "line": 21
+          }
+        },
+        "selectionRange": {
+          "end": {
+            "character": 24,
+            "line": 21
+          },
+          "start": {
+            "character": 8,
+            "line": 21
+          }
+        }
+      }
+    ],
+    "kind": 3,
+    "name": "A",
+    "range": {
+      "end": {
+        "character": 5,
+        "line": 23
+      },
+      "start": {
+        "character": 0,
+        "line": 0
+      }
+    },
+    "selectionRange": {
+      "end": {
+        "character": 11,
+        "line": 0
+      },
+      "start": {
+        "character": 10,
+        "line": 0
+      }
+    }
+  },
+  {
+    "kind": 6,
+    "name": "rootDecl",
+    "range": {
+      "end": {
+        "character": 17,
+        "line": 25
+      },
+      "start": {
+        "character": 0,
+        "line": 25
+      }
+    },
+    "selectionRange": {
+      "end": {
+        "character": 12,
+        "line": 25
+      },
+      "start": {
+        "character": 4,
+        "line": 25
+      }
+    }
+  }
+]

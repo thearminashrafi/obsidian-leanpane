@@ -1,0 +1,52 @@
+{
+  "after_constructor": {
+    "line": 4,
+    "character": 2,
+    "lineText": "  constructor",
+    "plainGoal": {
+      "goals": [
+        "p q : Prop\nhp : p\nhq : q\n⊢ q ∧ p"
+      ],
+      "rendered": "```lean\np q : Prop\nhp : p\nhq : q\n⊢ q ∧ p\n```"
+    },
+    "plainTermGoal": null
+  },
+  "bullet_first": {
+    "line": 5,
+    "character": 4,
+    "lineText": "  · exact hq",
+    "plainGoal": {
+      "goals": [
+        "case left\np q : Prop\nhp : p\nhq : q\n⊢ q"
+      ],
+      "rendered": "```lean\ncase left\np q : Prop\nhp : p\nhq : q\n⊢ q\n```"
+    },
+    "plainTermGoal": null
+  },
+  "induction_zero": {
+    "line": 12,
+    "character": 4,
+    "lineText": "    omega",
+    "plainGoal": {
+      "goals": [
+        "case zero\nb c : Nat\n⊢ b + c = c + b"
+      ],
+      "rendered": "```lean\ncase zero\nb c : Nat\n⊢ b + c = c + b\n```"
+    },
+    "plainTermGoal": null
+  },
+  "induction_succ": {
+    "line": 15,
+    "character": 4,
+    "lineText": "",
+    "plainGoal": null,
+    "plainTermGoal": null
+  },
+  "theorem_statement": {
+    "line": 2,
+    "character": 40,
+    "lineText": "/-- A tactic proof of several lines, used for goal-view tests. -/",
+    "plainGoal": null,
+    "plainTermGoal": null
+  }
+}

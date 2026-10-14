@@ -1,0 +1,41 @@
+name: Release
+
+# On every push to main: if the version in manifest.json has no GitHub release yet,
+# build the plugin and publish release <version> (tag created by GitHub) with
+# main.js, manifest.json and styles.css attached. To release a new version, bump
+# "version" in manifest.json (and add it to versions.json) and push to main.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version and check for an existing release
+        id: v
+        run: |
+          v=$(node -p "require('./manifest.json').version")
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if gh release view "$v" >/dev/null 2>&1; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.v.outputs.exists == 'false'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - if: steps.v.outputs.exists == 'false'
+        run: npm ci && npm run build
+      - if: steps.v.outputs.exists == 'false'
+        name: Publish release
+        run: |
+          gh release create "${{ steps.v.outputs.version }}" release/main.js release/manifest.json release/styles.css \
+            --target "$GITHUB_SHA" --title "LeanPane ${{ steps.v.outputs.version }}" --notes-file .github/release-notes.md
+      - if: steps.v.outputs.exists == 'true'
+        run: echo "Release ${{ steps.v.outputs.version }} already exists; nothing to do."

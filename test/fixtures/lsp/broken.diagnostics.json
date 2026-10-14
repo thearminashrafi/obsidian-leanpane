@@ -1,0 +1,52 @@
+[
+  {
+    "fullRange": {
+      "end": {
+        "character": 39,
+        "line": 5
+      },
+      "start": {
+        "character": 34,
+        "line": 5
+      }
+    },
+    "message": "Type mismatch\n  \"one\"\nhas type\n  String\nbut is expected to have type\n  Nat",
+    "range": {
+      "end": {
+        "character": 39,
+        "line": 5
+      },
+      "start": {
+        "character": 34,
+        "line": 5
+      }
+    },
+    "severity": 1,
+    "source": "Lean 4"
+  },
+  {
+    "fullRange": {
+      "end": {
+        "character": 5,
+        "line": 6
+      },
+      "start": {
+        "character": 2,
+        "line": 6
+      }
+    },
+    "message": "Tactic `rfl` failed: The left-hand side\n  true\nis not definitionally equal to the right-hand side\n  Function.const Lean.Name () `StatusProj.Broken.6.22.6.39.22.39._sorry._@.StatusProj.Broken.1570618748._hygCtx._hyg.11\n\n⊢ sorry",
+    "range": {
+      "end": {
+        "character": 5,
+        "line": 6
+      },
+      "start": {
+        "character": 2,
+        "line": 6
+      }
+    },
+    "severity": 1,
+    "source": "Lean 4"
+  }
+]

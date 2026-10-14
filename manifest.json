@@ -1,0 +1,9 @@
+{
+  "id": "leanpane",
+  "name": "LeanPane",
+  "version": "0.1.0",
+  "minAppVersion": "1.8.0",
+  "description": "Edit Lean 4 files in Obsidian with live goals, errors and declaration status from your installed Lean.",
+  "author": "Armin Ashrafi",
+  "isDesktopOnly": true
+}

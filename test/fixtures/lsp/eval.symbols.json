@@ -1,0 +1,27 @@
+[
+  {
+    "children": [],
+    "kind": 3,
+    "name": "StatusProj",
+    "range": {
+      "end": {
+        "character": 14,
+        "line": 7
+      },
+      "start": {
+        "character": 0,
+        "line": 2
+      }
+    },
+    "selectionRange": {
+      "end": {
+        "character": 20,
+        "line": 2
+      },
+      "start": {
+        "character": 10,
+        "line": 2
+      }
+    }
+  }
+]

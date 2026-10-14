@@ -1,0 +1,27 @@
+[
+  {
+    "fullRange": {
+      "end": {
+        "character": 20,
+        "line": 14
+      },
+      "start": {
+        "character": 8,
+        "line": 14
+      }
+    },
+    "message": "declaration uses 'sorry'",
+    "range": {
+      "end": {
+        "character": 20,
+        "line": 14
+      },
+      "start": {
+        "character": 8,
+        "line": 14
+      }
+    },
+    "severity": 2,
+    "source": "Lean 4"
+  }
+]

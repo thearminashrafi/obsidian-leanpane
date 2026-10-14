@@ -1,0 +1,209 @@
+// Adapted from leanprover/vscode-lean4 (vscode-lean4/src/rpc.ts), Apache License 2.0, Copyright the Lean FRO contributors.
+// Copied unchanged so that the host and iframe sides speak the same postMessage protocol as the official infoview hosts.
+import { EditorApi } from '@leanprover/infoview-api'
+
+/**
+ * Allows two endpoints communicating via JSON-serializable messages
+ * to invoke methods on each other.
+ * We use this for infoview<->editor communication.
+ * The infoview calls the editor via an {@link EditorRpcApi},
+ * whereas the other direction uses an {@link InfoviewApi}.
+ *
+ * #### Call flow
+ *
+ * Both endpoints own an instance of this class;
+ * call these `rpcA` and `rpcB`.
+ * When endpoint A wants to invoke method `name` on endpoint B,
+ * it calls `rpcA.invoke(name, args)`
+ * (via the typed interface returned by `rpcA.getApi`).
+ * This sends a message to endpoint B containing the call parameters in a serialized form.
+ * Upon receiving the message,
+ * endpoint B looks up `name` in its registered methods
+ * (set via `rpcB.register`)
+ * and invokes the found entry with deserialized call parameters.
+ * The registered method is necessarily `async`,
+ * and the resulting `Promise` is awaited by B.
+ * When it resolves, a response message is sent back to endpoint A.
+ * Upon receiving the response,
+ * endpoint A resolves the `Promise` produced by `rpcA.invoke`.
+ */
+export class Rpc {
+    private seqNum = 0
+    private methods: { [name: string]: (...args: any[]) => Promise<any> } = {}
+    private pending: { [seqNum: number]: { resolve: (_: any) => void; reject: (_: string) => void } } = {}
+    /** Resolves when both sides of the channel are ready to receive procedure calls. */
+    private initPromise: Promise<void>
+    private resolveInit: () => void
+    private initialized: boolean = false
+
+    constructor(readonly sendMessage: (msg: any) => void) {
+        this.resolveInit = () => {} // pacify the typechecker; the real initializer is below
+        this.initPromise = new Promise(resolve => {
+            this.resolveInit = resolve
+        })
+    }
+
+    /** Register procedures that the other side of the channel can invoke. Must be called exactly once. */
+    register<T>(methods: T): void {
+        if (this.initialized) throw new Error('RPC methods already registered')
+        this.methods = { ...methods } as any
+        const interval = setInterval(() => {
+            this.sendMessage({ kind: 'initialize' })
+        }, 50)
+        const prevResolveInit = this.resolveInit
+        this.resolveInit = () => {
+            clearInterval(interval)
+            prevResolveInit()
+        }
+        this.initialized = true
+    }
+
+    // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types
+    messageReceived(msg: any): void {
+        if (msg.kind) {
+            if (msg.kind === 'initialize') {
+                this.sendMessage({ kind: 'initialized' })
+            } else if (msg.kind === 'initialized' && this.initialized) {
+                this.resolveInit()
+            }
+            return
+        }
+        const { seqNum, name, args, result, exception }: any = msg
+        if (seqNum === undefined) return
+        if (name !== undefined) {
+            // It's important that we wait on `initPromise` here. Otherwise we may try to invoke
+            // a method before `register` is called.
+            return void this.initPromise.then(async () => {
+                try {
+                    const fn = this.methods[name]
+                    if (fn === undefined) throw new Error(`unknown RPC method ${name}`)
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+                    this.sendMessage({ seqNum, result: await fn(...args) })
+                } catch (ex: any) {
+                    this.sendMessage({ seqNum, exception: prepareExceptionForSerialization(ex) })
+                }
+            })
+        }
+        if (exception !== undefined) {
+            this.pending[seqNum].reject(exception as string)
+        } else {
+            this.pending[seqNum].resolve(result)
+        }
+        delete this.pending[seqNum]
+    }
+
+    async invoke(name: string, args: any[]): Promise<any> {
+        await this.initPromise
+        this.seqNum += 1
+        const seqNum = this.seqNum
+        return new Promise((resolve, reject) => {
+            this.pending[seqNum] = { resolve, reject }
+            this.sendMessage({ seqNum, name, args })
+        })
+    }
+
+    /** Wrap a set of methods callable on the other endpoint as a typed interface.
+     * Each method is expected to have type `(...args: any[]) => Promise<any>`,
+     * with each argument as well as the return value JSON-serializable. */
+    getApi<T>(): T {
+        return new Proxy(
+            {},
+            {
+                get:
+                    (_, prop) =>
+                    (...args: any[]) =>
+                        this.invoke(prop as string, args),
+            },
+        ) as any
+    }
+}
+
+function prepareExceptionForSerialization(ex: any): any {
+    if (ex === undefined) {
+        return 'error'
+    } else if (typeof ex === 'object' && !(ex instanceof Array)) {
+        /* Certain properties (such as `ex.message`) are not /enumerable/ per ECMAScript
+         * and disappear along the way through `Webview.postMessage`; we create a new object
+         * so that they make it through. */
+        const exOut: any = {}
+        for (const p of Object.getOwnPropertyNames(ex)) {
+            exOut[p] = ex[p]
+        }
+        return exOut
+    } else {
+        return ex
+    }
+}
+
+/**
+ * A version of {@link EditorApi} in which all values are serializable.
+ * It is used to pass messages between the editor and the infoview.
+ */
+export type EditorRpcApi = Omit<EditorApi, 'sendClientRequest'> & {
+    startClientRequest(uri: string, method: string, params: any): Promise<number>
+    awaitClientRequest(id: number): Promise<any>
+    cancelClientRequest(id: number): Promise<void>
+}
+
+/** Because `startClientRequest` is async,
+ * cancellation may be requested (via the abort signal) before the request ID is known.
+ * Fields here handle this race. */
+interface CancellationData {
+    /** The request ID, set once `startClientRequest` resolves, and `undefined` until then. */
+    id: number | undefined
+    /** Set to `true` when the abort signal is triggered.
+     * If `id` is not yet available,
+     * this flag ensures that the request will be cancelled as soon as `id` arrives. */
+    shouldCancel: boolean
+    /** Set to `true` once `cancelClientRequest` has actually been called,
+     * preventing duplicate calls. */
+    cancelled: boolean
+}
+
+/**
+ * Wrap {@link EditorRpcApi} in the more convenient {@link EditorApi}.
+ * Called during infoview initialization.
+ */
+export function editorApiOfRpc(api: EditorRpcApi): EditorApi {
+    function cancel(d: CancellationData) {
+        d.shouldCancel = true
+        if (d.id !== undefined && !d.cancelled) {
+            void api.cancelClientRequest(d.id)
+            d.cancelled = true
+        }
+    }
+    return {
+        sendClientRequest(uri, method, params, options) {
+            const d: CancellationData = {
+                id: undefined,
+                shouldCancel: false,
+                cancelled: false,
+            }
+            const promise = (async () => {
+                const id = await api.startClientRequest(uri, method, params)
+                d.id = id
+                if (d.shouldCancel) cancel(d)
+                return api.awaitClientRequest(id)
+            })()
+            if (options?.abortSignal)
+                options.abortSignal.addEventListener('abort', () => {
+                    cancel(d)
+                })
+            return promise
+        },
+        /** NOTE: a spread (`...`) doesn't work due to the use of {@link Proxy} in {@link Rpc}. */
+        saveConfig: api.saveConfig,
+        sendClientNotification: api.sendClientNotification,
+        subscribeServerNotifications: api.subscribeServerNotifications,
+        unsubscribeServerNotifications: api.unsubscribeServerNotifications,
+        subscribeClientNotifications: api.subscribeClientNotifications,
+        unsubscribeClientNotifications: api.unsubscribeClientNotifications,
+        copyToClipboard: api.copyToClipboard,
+        insertText: api.insertText,
+        applyEdit: api.applyEdit,
+        showDocument: api.showDocument,
+        restartFile: api.restartFile,
+        createRpcSession: api.createRpcSession,
+        closeRpcSession: api.closeRpcSession,
+    }
+}

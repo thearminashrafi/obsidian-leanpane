@@ -1,0 +1,53 @@
+/* LeanPane. Interface colours come from Obsidian's CSS variables only.
+   The one exception is the syntax palette below (npm run lint:colors enforces this). */
+
+/* LP-SYNTAX-BEGIN */
+.theme-light .leanpane-view {
+  --lp-syn-keyword: #8a3b76;
+  --lp-syn-tactic: #2f6f5e;
+  --lp-syn-type: #1f5f99;
+  --lp-syn-const: #a65300;
+  --lp-syn-string: #a3402f;
+  --lp-syn-number: #a65300;
+  --lp-syn-comment: #7a746a;
+  --lp-syn-doc: #5d7a4a;
+  --lp-syn-sorry: #b3261e;
+}
+.theme-dark .leanpane-view {
+  --lp-syn-keyword: #d49bc9;
+  --lp-syn-tactic: #5fb39b;
+  --lp-syn-type: #7fb0e0;
+  --lp-syn-const: #e3a857;
+  --lp-syn-string: #e8907c;
+  --lp-syn-number: #e3a857;
+  --lp-syn-comment: #8a8780;
+  --lp-syn-doc: #9bc27f;
+  --lp-syn-sorry: #f0877f;
+}
+/* LP-SYNTAX-END */
+
+/* "Follow theme" maps the tokens to Obsidian's code colours */
+.leanpane-view.lp-follow-theme {
+  --lp-syn-keyword: var(--code-keyword);
+  --lp-syn-tactic: var(--code-function);
+  --lp-syn-type: var(--code-property);
+  --lp-syn-const: var(--code-value);
+  --lp-syn-string: var(--code-string);
+  --lp-syn-number: var(--code-value);
+  --lp-syn-comment: var(--code-comment);
+  --lp-syn-doc: var(--code-comment);
+  --lp-syn-sorry: var(--text-error);
+}
+
+.lp-tok-keyword { color: var(--lp-syn-keyword); font-weight: var(--font-semibold); }
+.lp-tok-tactic { color: var(--lp-syn-tactic); }
+.lp-tok-type { color: var(--lp-syn-type); }
+.lp-tok-const { color: var(--lp-syn-const); }
+.lp-tok-string { color: var(--lp-syn-string); }
+.lp-tok-number { color: var(--lp-syn-number); }
+.lp-tok-comment { color: var(--lp-syn-comment); font-style: italic; }
+.lp-tok-doc { color: var(--lp-syn-doc); font-style: italic; }
+.lp-tok-attribute { color: var(--lp-syn-const); }
+.lp-tok-sorry { color: var(--lp-syn-sorry); font-weight: var(--font-bold); }
+
+/* Layout, goals pane, messages drawer and outline styles are added with the views (stage 3). */

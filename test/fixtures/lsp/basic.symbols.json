@@ -1,0 +1,124 @@
+[
+  {
+    "children": [
+      {
+        "kind": 6,
+        "name": "proved_add_zero",
+        "range": {
+          "end": {
+            "character": 5,
+            "line": 11
+          },
+          "start": {
+            "character": 0,
+            "line": 9
+          }
+        },
+        "selectionRange": {
+          "end": {
+            "character": 23,
+            "line": 10
+          },
+          "start": {
+            "character": 8,
+            "line": 10
+          }
+        }
+      },
+      {
+        "kind": 6,
+        "name": "stated_sorry",
+        "range": {
+          "end": {
+            "character": 7,
+            "line": 15
+          },
+          "start": {
+            "character": 0,
+            "line": 13
+          }
+        },
+        "selectionRange": {
+          "end": {
+            "character": 20,
+            "line": 14
+          },
+          "start": {
+            "character": 8,
+            "line": 14
+          }
+        }
+      },
+      {
+        "kind": 6,
+        "name": "uses_sorry",
+        "range": {
+          "end": {
+            "character": 7,
+            "line": 20
+          },
+          "start": {
+            "character": 0,
+            "line": 17
+          }
+        },
+        "selectionRange": {
+          "end": {
+            "character": 18,
+            "line": 18
+          },
+          "start": {
+            "character": 8,
+            "line": 18
+          }
+        }
+      },
+      {
+        "kind": 6,
+        "name": "double",
+        "range": {
+          "end": {
+            "character": 35,
+            "line": 23
+          },
+          "start": {
+            "character": 0,
+            "line": 22
+          }
+        },
+        "selectionRange": {
+          "end": {
+            "character": 10,
+            "line": 23
+          },
+          "start": {
+            "character": 4,
+            "line": 23
+          }
+        }
+      }
+    ],
+    "kind": 3,
+    "name": "StatusProj",
+    "range": {
+      "end": {
+        "character": 14,
+        "line": 25
+      },
+      "start": {
+        "character": 0,
+        "line": 7
+      }
+    },
+    "selectionRange": {
+      "end": {
+        "character": 20,
+        "line": 7
+      },
+      "start": {
+        "character": 10,
+        "line": 7
+      }
+    }
+  }
+]

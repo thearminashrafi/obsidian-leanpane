@@ -1,0 +1,22 @@
+import esbuild from "/home/claude/leanpane-build/obsidian-leanpane/node_modules/esbuild/lib/main.js";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { chromium } from "/opt/npm-tools/node_modules/playwright/index.mjs";
+const D = "/home/claude/leanpane-build/obsidian-leanpane/node_modules/@leanprover/infoview/dist/";
+const out = await esbuild.build({ entryPoints: ["/home/claude/leanpane-build/scratch/spike/entry.ts"], bundle: true, write: false, format: "iife", platform: "browser", nodePaths: ["/home/claude/leanpane-build/obsidian-leanpane/node_modules"] });
+const webviewJs = out.outputFiles[0].text;
+const a = { infoviewJs: readFileSync(D + "index.production.min.js", "utf8"), reactJs: readFileSync(D + "react.production.min.js", "utf8"), jsxRuntimeJs: readFileSync(D + "react-jsx-runtime.production.min.js", "utf8"), reactDomJs: readFileSync(D + "react-dom.production.min.js", "utf8"), css: readFileSync(D + "index.css", "utf8").replace(/url\([^)]*codicon[^)]*\)/g, "none") };
+const srcdoc = `<!doctype html><html><body><div id="react_root"></div><script>${webviewJs.replace(/<\/script/g, "<\\/script")}</script></body></html>`;
+const sandbox = process.argv[2] === "nosandbox" ? "" : 'sandbox="allow-scripts"';
+const html = `<!doctype html><body><iframe id="f" ${sandbox} style="width:600px;height:400px"></iframe><script>
+const f=document.getElementById('f'); window.__logs=[];
+window.addEventListener('message',e=>{ if(e.source!==f.contentWindow) return; if(e.data.type==='log') window.__logs.push(e.data.m); if(e.data.type==='ready') f.contentWindow.postMessage({type:'init',a:window.__assets},'*'); });
+</script></body>`;
+const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium-1194/chrome-linux/chrome", args: ["--no-sandbox"] });
+const page = await browser.newPage();
+await page.setContent(html);
+await page.evaluate(([a, srcdoc]) => { window.__assets = a; document.getElementById("f").srcdoc = srcdoc; }, [a, srcdoc]);
+await page.waitForTimeout(4000);
+console.log(await page.evaluate(() => window.__logs));
+console.log(await browser.version());
+await browser.close();
