@@ -45,16 +45,16 @@
   --lp-syn-property: var(--code-property);
 }
 
-.lp-tok-keyword { color: var(--lp-syn-keyword); font-weight: var(--font-semibold); }
-.lp-tok-tactic { color: var(--lp-syn-tactic); }
-.lp-tok-type { color: var(--lp-syn-type); }
-.lp-tok-const { color: var(--lp-syn-const); }
-.lp-tok-string { color: var(--lp-syn-string); }
-.lp-tok-number { color: var(--lp-syn-number); }
-.lp-tok-comment { color: var(--lp-syn-comment); font-style: italic; }
-.lp-tok-doc { color: var(--lp-syn-doc); font-style: italic; }
-.lp-tok-attribute { color: var(--lp-syn-const); }
-.lp-tok-sorry { color: var(--lp-syn-sorry); font-weight: var(--font-bold); }
+.lp-tok-keyword { color: var(--lp-syn-keyword, var(--code-keyword)); font-weight: var(--font-semibold); }
+.lp-tok-tactic { color: var(--lp-syn-tactic, var(--code-function)); }
+.lp-tok-type { color: var(--lp-syn-type, var(--code-property)); }
+.lp-tok-const { color: var(--lp-syn-const, var(--code-value)); }
+.lp-tok-string { color: var(--lp-syn-string, var(--code-string)); }
+.lp-tok-number { color: var(--lp-syn-number, var(--code-value)); }
+.lp-tok-comment { color: var(--lp-syn-comment, var(--code-comment)); font-style: italic; }
+.lp-tok-doc { color: var(--lp-syn-doc, var(--code-comment)); font-style: italic; }
+.lp-tok-attribute { color: var(--lp-syn-const, var(--code-value)); }
+.lp-tok-sorry { color: var(--lp-syn-sorry, var(--text-error)); font-weight: var(--font-bold); }
 
 
 /* semantic tokens (drawn from the language server on top of the basic highlighting) */

@@ -2,6 +2,7 @@
  * CodeMirror 6 StreamLanguage tokenizer for Lean 4 + highlight style bound to `lp-tok-*` CSS classes.
  * TASK: docs/tasks/09-lean-language.md
  */
+import { streamHighlight } from "./streamHighlight";
 import { StreamLanguage, HighlightStyle, syntaxHighlighting, type StreamParser, type StringStream } from "@codemirror/language";
 import type { Extension } from "@codemirror/state";
 import { Tag } from "@lezer/highlight";
@@ -91,7 +92,7 @@ function classifyIdent(text: string): string | null {
   return null;
 }
 
-const parser: StreamParser<LeanState> = {
+export const parser: StreamParser<LeanState> = {
   name: "lean4",
   startState: (): LeanState => ({ blockDepth: 0, blockKind: "comment", inString: false }),
   copyState: (s: LeanState): LeanState => ({ ...s }),
@@ -169,5 +170,5 @@ export const leanHighlight: HighlightStyle = HighlightStyle.define([
 
 /** [leanLanguage, syntaxHighlighting(leanHighlight)] */
 export function leanSyntax(): Extension {
-  return [leanLanguage, syntaxHighlighting(leanHighlight)];
+  return [leanLanguage, streamHighlight(parser, "lean", "lp-tok")];
 }
