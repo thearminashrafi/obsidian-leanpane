@@ -14,7 +14,7 @@ import { runStreaming } from "./core/runner";
 import { killAllQueries } from "./core/execTree";
 import { resolveVaultFolder } from "./core/paths";
 import { killServerProcesses } from "./core/shutdown";
-import { createLeanProject, ProjectCreateError } from "./core/projectCreate";
+import { addBlueprintSkeleton, createLeanProject, libNameOf, ProjectCreateError } from "./core/projectCreate";
 import { defaultBlueprintEnv, defaultBlueprintLabel, symbolKindLabel, uriToPath } from "./core/lsp";
 import { MATHLIB_CACHE_ARGS, newLeanFileContent, uniqueFileName } from "./core/templates";
 import {
@@ -696,6 +696,17 @@ export default class LeanPanePlugin extends Plugin {
     });
     this.addCommand({ id: "next-message", name: "Next message", icon: "arrow-down", hotkeys: [{ modifiers: [], key: "F8" }], checkCallback: withWb((wb) => wb.nextMessage(1)) });
     this.addCommand({ id: "previous-message", name: "Previous message", icon: "arrow-up", hotkeys: [{ modifiers: ["Shift"], key: "F8" }], checkCallback: withWb((wb) => wb.nextMessage(-1)) });
+    this.addCommand({
+      id: "add-blueprint-to-project",
+      name: "Add a LaTeX blueprint to this project",
+      icon: "book-plus",
+      checkCallback: (checking) => {
+        const root = this.activeWorkbench()?.projectRoot();
+        if (!root || !this.activeLeanView()) return false;
+        if (!checking) void this.addBlueprintTo(root);
+        return true;
+      },
+    });
     this.addCommand({ id: "open-projects", name: "Open Lean projects", icon: "leanpane-lambda", callback: () => void this.openProjectsPanel() });
     this.addCommand({ id: "open-outline", name: "Open Lean outline", icon: "list-tree", callback: () => void this.openOutline() });
     this.addCommand({
@@ -719,6 +730,21 @@ export default class LeanPanePlugin extends Plugin {
     if (!leaf) return;
     if (!existing) await leaf.setViewState({ type: PROJECTS_TYPE, active: true });
     void this.app.workspace.revealLeaf(leaf);
+  }
+
+  /** Add the LaTeX blueprint skeleton to an existing project (absolute root); never overwrites files. */
+  async addBlueprintTo(root: string, openBeside = true): Promise<void> {
+    try {
+      const name = path.basename(root);
+      const res = await addBlueprintSkeleton(root, name, await libNameOf(root, name));
+      new Notice(res.created.length ? `LeanPane: added the blueprint (${res.created.length} files).` : "LeanPane: this project already has a blueprint.");
+      const main = await this.waitForVaultFile(res.starterLean);
+      const tex = await this.waitForVaultFile(res.contentTex);
+      if (main && !this.app.workspace.getActiveFile()) await this.app.workspace.getLeaf("tab").openFile(main);
+      if (tex && openBeside && this.texpaneApi()) await this.app.workspace.getLeaf("split", "vertical").openFile(tex);
+    } catch (e) {
+      new Notice(`LeanPane: could not add the blueprint: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   /** Ask the trust question for the project rooted at `root` (absolute); used by the projects panel. */
@@ -747,7 +773,7 @@ export default class LeanPanePlugin extends Plugin {
     new NewProjectModal(this.app, folder.isRoot() ? "" : folder.path, !!this.texpaneApi(), (req) => void this.createProject(req)).open();
   }
 
-  private async createProject(req: { folder: string; name: string; mathlib: boolean; blueprint: boolean }): Promise<void> {
+  private async createProject(req: { folder: string; name: string; mathlib: boolean; blueprint: boolean; openBeside: boolean }): Promise<void> {
     const parentDir = resolveVaultFolder(this.basePath(), req.folder);
     if (parentDir === null || !this.basePath()) {
       new Notice("LeanPane: the location must be a folder inside the vault.", 8000);
@@ -781,7 +807,7 @@ export default class LeanPanePlugin extends Plugin {
       modal.finish(true, `Project created.${warn}`);
       const main = await this.waitForVaultFile(res.mainLean);
       if (main) await this.app.workspace.getLeaf("tab").openFile(main);
-      if (res.contentTex && this.texpaneApi()) {
+      if (res.contentTex && req.openBeside && this.texpaneApi()) {
         const tex = await this.waitForVaultFile(res.contentTex);
         if (tex) await this.app.workspace.getLeaf("split", "vertical").openFile(tex);
       }

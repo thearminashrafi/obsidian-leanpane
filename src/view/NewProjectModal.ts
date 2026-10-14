@@ -7,14 +7,17 @@ export interface NewProjectRequest {
   name: string;
   mathlib: boolean;
   blueprint: boolean;
+  /** Open the LaTeX blueprint beside the Lean file (only with a blueprint and TeXPane). */
+  openBeside: boolean;
 }
 
 export class NewProjectModal extends Modal {
   private req: NewProjectRequest;
   private warn!: HTMLElement;
+  private besideRow!: Setting;
   constructor(app: App, initialFolder: string, private teXPaneAvailable: boolean, private onSubmit: (r: NewProjectRequest) => void) {
     super(app);
-    this.req = { folder: initialFolder, name: "my-lean-project", mathlib: false, blueprint: true };
+    this.req = { folder: initialFolder, name: "my-lean-project", mathlib: false, blueprint: false, openBeside: true };
   }
   onOpen(): void {
     const { contentEl } = this;
@@ -46,13 +49,19 @@ export class NewProjectModal extends Modal {
       .setDesc("Uses the Mathlib template and downloads the prebuilt cache (several GB on disk, can take a few minutes). Off: a plain Lean project that builds in seconds.")
       .addToggle((t) => t.setValue(this.req.mathlib).onChange((v) => (this.req.mathlib = v)));
     new Setting(contentEl)
-      .setName("Add a blueprint")
-      .setDesc(
-        this.teXPaneAvailable
-          ? "Adds blueprint/src with LaTeX files and a starter lemma linked to a starter theorem. TeXPane compiles and tracks it."
-          : "Adds blueprint/src with LaTeX files and a starter lemma linked to a starter theorem. Install TeXPane to edit and compile the LaTeX in Obsidian.",
-      )
-      .addToggle((t) => t.setValue(this.req.blueprint).onChange((v) => (this.req.blueprint = v)));
+      .setName("Add a LaTeX blueprint (optional)")
+      .setDesc("Adds blueprint/src with LaTeX files and a starter lemma linked to a starter theorem, for writing the maths alongside the Lean code. You can skip this and add it later from the project's right-click menu.")
+      .addToggle((t) =>
+        t.setValue(this.req.blueprint).onChange((v) => {
+          this.req.blueprint = v;
+          this.besideRow.settingEl.toggle(v);
+        }),
+      );
+    this.besideRow = new Setting(contentEl)
+      .setName("Open the LaTeX next to the Lean file")
+      .setDesc(this.teXPaneAvailable ? "Opens content.tex in a split beside the Lean file." : "Needs the TeXPane plugin, which is not enabled.")
+      .addToggle((t) => t.setValue(this.req.openBeside && this.teXPaneAvailable).setDisabled(!this.teXPaneAvailable).onChange((v) => (this.req.openBeside = v)));
+    this.besideRow.settingEl.toggle(this.req.blueprint);
     this.warn = contentEl.createDiv({ cls: "lp-form-warning" });
     new Setting(contentEl).addButton((b) => b.setButtonText("Create project").setCta().onClick(() => this.submit()));
     this.refresh();

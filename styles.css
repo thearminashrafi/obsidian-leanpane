@@ -336,7 +336,7 @@
 .lp-projects-section-head { padding: 4px var(--size-4-2); color: var(--text-muted); font-size: var(--font-ui-smaller); font-weight: var(--font-semibold); text-transform: uppercase; letter-spacing: 0.04em; }
 .lp-projects .lp-row { display: flex; align-items: center; gap: 6px; padding-top: 3px; padding-bottom: 3px; border-radius: var(--radius-s); }
 .lp-projects .lp-row .tree-item-inner { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lp-projects .tree-item-children { padding-left: 14px; margin-left: 9px; border-left: 1px solid var(--background-modifier-border); }
+.lp-projects .tree-item-children { padding-left: 7px; margin-left: 4px; border-left: 1px solid var(--background-modifier-border); }
 .lp-projects .lp-chevron-space { width: 16px; flex: 0 0 auto; }
 .lp-projects .collapse-icon { flex: 0 0 auto; }
 .lp-projects .lp-row-icon { display: inline-flex; flex: 0 0 auto; color: var(--text-faint); }

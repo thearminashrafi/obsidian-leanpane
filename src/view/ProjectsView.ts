@@ -259,6 +259,9 @@ export class ProjectsView extends ItemView {
         if (folder instanceof TFolder) void this.plugin.newLeanFile(folder);
       }),
     );
+    if (!p.files.some((f) => f.endsWith("blueprint/src/content.tex"))) {
+      m.addItem((i) => i.setTitle("Add a LaTeX blueprint…").setIcon("book-plus").onClick(() => void this.plugin.addBlueprintTo(abs)));
+    }
     m.addSeparator();
     if (!trusted) m.addItem((i) => i.setTitle("Trust this project…").setIcon("shield-check").onClick(() => void this.lpTrust(abs)));
     m.addItem((i) => i.setTitle("Build project").setIcon("hammer").onClick(() => void this.plugin.buildProject(abs)));

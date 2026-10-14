@@ -89,30 +89,42 @@ export async function createLeanProject(o: CreateProjectOptions): Promise<Create
 
   if (o.blueprint) {
     log("\nAdding the blueprint skeleton\n");
-    const starter = starterLeanFile(libName);
-    const put = async (rel: string, content: string): Promise<void> => {
-      const abs = path.join(root, ...rel.split("/"));
-      await fsp.mkdir(path.dirname(abs), { recursive: true });
-      await fsp.writeFile(abs, content, "utf8");
-    };
-    for (const f of blueprintFiles({ projectName: name, libName })) await put(f.path, f.content);
-    await put(starter.path, starter.content);
-    const rootFile = path.join(root, `${libName}.lean`);
-    let rootText = "";
-    try {
-      rootText = await fsp.readFile(rootFile, "utf8");
-    } catch {
-      /* no root file yet */
-    }
-    const importLine = `import ${starter.module}`;
-    if (!rootText.split(/\r?\n/).some((l) => l.trim() === importLine)) {
-      await fsp.writeFile(rootFile, rootText + (rootText === "" || rootText.endsWith("\n") ? "" : "\n") + importLine + "\n", "utf8");
-    }
-    mainLean = path.join(root, ...starter.path.split("/"));
-    contentTex = path.join(root, "blueprint", "src", "content.tex");
+    const bp = await addBlueprintSkeleton(root, name, libName);
+    mainLean = bp.starterLean;
+    contentTex = bp.contentTex;
   }
 
   const result: CreateProjectResult = { root, libName, mainLean, warnings };
   if (contentTex) result.contentTex = contentTex;
   return result;
+}
+
+/**
+ * Adds blueprint/src (LaTeX files), a starter Lean file and its import to an existing Lean project.
+ * Never overwrites: files that already exist are left alone. Returns the paths of the starter files.
+ */
+export async function addBlueprintSkeleton(root: string, projectName: string, libName: string): Promise<{ starterLean: string; contentTex: string; created: string[] }> {
+  const created: string[] = [];
+  const starter = starterLeanFile(libName);
+  const put = async (rel: string, content: string): Promise<void> => {
+    const abs = path.join(root, ...rel.split("/"));
+    if (await exists(abs)) return;
+    await fsp.mkdir(path.dirname(abs), { recursive: true });
+    await fsp.writeFile(abs, content, "utf8");
+    created.push(rel);
+  };
+  for (const f of blueprintFiles({ projectName, libName })) await put(f.path, f.content);
+  await put(starter.path, starter.content);
+  const rootFile = path.join(root, `${libName}.lean`);
+  let rootText = "";
+  try {
+    rootText = await fsp.readFile(rootFile, "utf8");
+  } catch {
+    /* no root file yet */
+  }
+  const importLine = `import ${starter.module}`;
+  if (created.includes(starter.path) && !rootText.split(/\r?\n/).some((l) => l.trim() === importLine)) {
+    await fsp.writeFile(rootFile, rootText + (rootText === "" || rootText.endsWith("\n") ? "" : "\n") + importLine + "\n", "utf8");
+  }
+  return { starterLean: path.join(root, ...starter.path.split("/")), contentTex: path.join(root, "blueprint", "src", "content.tex"), created };
 }

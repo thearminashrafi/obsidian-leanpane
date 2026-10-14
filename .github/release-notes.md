@@ -1,3 +1,5 @@
-LeanPane 0.1.2
+LeanPane 0.1.3
 
-- Fix: syntax colours were missing in the editor (keywords, tactics, types, comments, strings). They are now applied directly as colour marks, and fall back to your theme colours if the LeanPane palette is unavailable.
+- The LaTeX blueprint is now optional when creating a project (off by default). A second switch chooses whether to open the LaTeX next to the Lean file.
+- New: add a blueprint to an existing project later (command "Add a LaTeX blueprint to this project", or right-click the project in the Lean projects panel). Existing files are never overwritten.
+- Smaller indentation in the projects panel tree.
