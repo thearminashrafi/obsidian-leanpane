@@ -7,7 +7,7 @@ and define "done". Stubs with the final signatures already exist (they `throw ne
 Common facts:
 - LeanPane repo: `/home/claude/leanpane-build/obsidian-leanpane`. TeXPane repo (task 11 only): `/home/claude/texpane-build/texpane`.
 - LeanPane tests of pending tasks live in the vitest project `tasks` (see `test/pending.ts`); run one file with
-  `npx vitest run --project tasks <file>`. When the lead integrates a task, its tests move to the `unit`/`lean` projects.
+  `npx vitest run <file>`. When the lead integrates a task, its tests move to the `unit`/`lean` projects.
 - Real Lean (4.25.1) is installed (`export PATH=$HOME/.elan/bin:$PATH` is applied automatically by `test/helpers/lean.ts`).
   Lean's download host is blocked: never run anything that needs to download a toolchain.
 

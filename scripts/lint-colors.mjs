@@ -30,11 +30,14 @@ outside.split("\n").forEach((line) => {
   }
 });
 // colours in TS source (inline styles) are forbidden too
+// Files allowed to contain colour literals: the infoview theme table maps VS Code variables to Obsidian variables and
+// carries a literal only as the last-resort fallback when no Obsidian variable resolves inside the iframe.
+const ALLOWED = ["src/infoview/theme.ts"];
 function walk(dir) {
   for (const f of readdirSync(dir)) {
     const p = join(dir, f);
     if (statSync(p).isDirectory()) walk(p);
-    else if (p.endsWith(".ts") && !p.includes("/core/")) {
+    else if (p.endsWith(".ts") && !p.includes("/core/") && !ALLOWED.some((a) => p.endsWith(a))) {
       readFileSync(p, "utf8").split("\n").forEach((line, i) => {
         const l = line.replace(/\/\/.*$/, "");
         if (/["'`]#[0-9a-fA-F]{3,8}["'`]/.test(l)) {

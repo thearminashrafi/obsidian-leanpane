@@ -1,5 +1,5 @@
 // Adapted from leanprover/vscode-lean4 (vscode-lean4/src/rpc.ts), Apache License 2.0, Copyright the Lean FRO contributors.
-// Copied unchanged so that the host and iframe sides speak the same postMessage protocol as the official infoview hosts.
+// Copied (plus Rpc.dispose) so that the host and iframe sides speak the same postMessage protocol as the official infoview hosts.
 import { EditorApi } from '@leanprover/infoview-api'
 
 /**
@@ -35,6 +35,7 @@ export class Rpc {
     private initPromise: Promise<void>
     private resolveInit: () => void
     private initialized: boolean = false
+    private initInterval: ReturnType<typeof setInterval> | undefined
 
     constructor(readonly sendMessage: (msg: any) => void) {
         this.resolveInit = () => {} // pacify the typechecker; the real initializer is below
@@ -50,12 +51,19 @@ export class Rpc {
         const interval = setInterval(() => {
             this.sendMessage({ kind: 'initialize' })
         }, 50)
+        this.initInterval = interval
         const prevResolveInit = this.resolveInit
         this.resolveInit = () => {
             clearInterval(interval)
             prevResolveInit()
         }
         this.initialized = true
+    }
+
+    /** LeanPane addition: stop the handshake retry timer (used when the iframe is torn down before it answered). */
+    dispose(): void {
+        if (this.initInterval !== undefined) clearInterval(this.initInterval)
+        this.initInterval = undefined
     }
 
     // eslint-disable-next-line @typescript-eslint/explicit-module-boundary-types

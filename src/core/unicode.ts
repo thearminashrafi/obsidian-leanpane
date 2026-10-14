@@ -21,6 +21,7 @@ export class UnicodeEngine {
     this.leader = o.leader ?? "\\"; this.eager = o.eager ?? true;
     this.p = new AbbreviationProvider({ abbreviationCharacter: this.leader, customTranslations: o.custom ?? {}, eagerReplacementEnabled: this.eager });
   }
+  get leaderChar(): string { return this.leader; }
   findActive(before: string): ActiveAbbreviation | null {
     const i = before.lastIndexOf(this.leader);
     if (i < 0) return null;
