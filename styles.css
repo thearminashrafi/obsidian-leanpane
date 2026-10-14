@@ -77,6 +77,8 @@
 .lp-editor-pane, .lp-goals-pane { min-width: 0; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 .lp-editor-pane { background: var(--background-primary); }
 .lp-goals-pane { background: var(--background-secondary); }
+/* keep the goals pane (and its Restart File button) clear of Obsidian's floating status bar */
+.lp-goals-pane { padding-bottom: 34px; box-sizing: border-box; }
 .lp-divider {
   flex: 0 0 6px;
   cursor: col-resize;

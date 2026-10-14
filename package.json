@@ -1,6 +1,6 @@
 {
   "name": "obsidian-leanpane",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Lean 4 workspace inside Obsidian",
   "main": "main.js",
   "private": true,
