@@ -45,6 +45,8 @@ export interface LeanPaneSettings {
   syntaxColours: "leanpane" | "theme";
   /** Request LSP semantic tokens and draw them over the StreamLanguage highlighting. */
   semanticTokens: boolean;
+  /** Vault folder where "New" in the Lean projects panel creates things. "" = vault root. */
+  projectsFolder: string;
 }
 export const DEFAULT_SETTINGS: LeanPaneSettings = {
   elanBinDir: "",
@@ -62,6 +64,7 @@ export const DEFAULT_SETTINGS: LeanPaneSettings = {
   fontSize: 14,
   syntaxColours: "leanpane",
   semanticTokens: true,
+  projectsFolder: "Lean",
 };
 
 // ---------------------------------------------------------------------------------------------------------------

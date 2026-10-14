@@ -32,6 +32,7 @@ import { LeanPaneSettingTab } from "./settings";
 import { LeanWorkspaceView, VIEW_TYPE } from "./view/LeanWorkspaceView";
 import { EXTERNAL_VIEW_TYPE, LeanExternalView } from "./view/LeanExternalView";
 import { OUTLINE_TYPE, OutlineView } from "./view/OutlineView";
+import { PROJECTS_TYPE, ProjectsView } from "./view/ProjectsView";
 import type { LeanWorkbench } from "./view/LeanWorkbench";
 import { AddToBlueprintModal } from "./view/AddToBlueprintModal";
 import { findLeaf } from "./view/leafLookup";
@@ -126,6 +127,8 @@ export default class LeanPanePlugin extends Plugin {
     this.registerView(VIEW_TYPE, (leaf) => new LeanWorkspaceView(leaf, this));
     this.registerView(EXTERNAL_VIEW_TYPE, (leaf) => new LeanExternalView(leaf, this));
     this.registerView(OUTLINE_TYPE, (leaf) => new OutlineView(leaf, this));
+    this.registerView(PROJECTS_TYPE, (leaf) => new ProjectsView(leaf, this));
+    this.addRibbonIcon("leanpane-lambda", "Lean projects", () => void this.openProjectsPanel());
     try {
       this.registerExtensions(["lean"], VIEW_TYPE);
     } catch (e) {
@@ -693,6 +696,7 @@ export default class LeanPanePlugin extends Plugin {
     });
     this.addCommand({ id: "next-message", name: "Next message", icon: "arrow-down", hotkeys: [{ modifiers: [], key: "F8" }], checkCallback: withWb((wb) => wb.nextMessage(1)) });
     this.addCommand({ id: "previous-message", name: "Previous message", icon: "arrow-up", hotkeys: [{ modifiers: ["Shift"], key: "F8" }], checkCallback: withWb((wb) => wb.nextMessage(-1)) });
+    this.addCommand({ id: "open-projects", name: "Open Lean projects", icon: "leanpane-lambda", callback: () => void this.openProjectsPanel() });
     this.addCommand({ id: "open-outline", name: "Open Lean outline", icon: "list-tree", callback: () => void this.openOutline() });
     this.addCommand({
       id: "recheck-lean",
@@ -707,6 +711,20 @@ export default class LeanPanePlugin extends Plugin {
 
   private defaultFolder(): TFolder {
     return this.app.workspace.getActiveFile()?.parent ?? this.app.vault.getRoot();
+  }
+
+  async openProjectsPanel(): Promise<void> {
+    const existing = this.app.workspace.getLeavesOfType(PROJECTS_TYPE)[0];
+    const leaf: WorkspaceLeaf | null = existing ?? this.app.workspace.getLeftLeaf(false);
+    if (!leaf) return;
+    if (!existing) await leaf.setViewState({ type: PROJECTS_TYPE, active: true });
+    void this.app.workspace.revealLeaf(leaf);
+  }
+
+  /** Ask the trust question for the project rooted at `root` (absolute); used by the projects panel. */
+  async trustProjectAt(root: string): Promise<void> {
+    const project = await this.findProjectDescriptor(root);
+    if (project && (await this.ensureTrusted(project))) new Notice("LeanPane: trusted.");
   }
 
   async openOutline(): Promise<void> {

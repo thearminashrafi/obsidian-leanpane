@@ -1,10 +1,4 @@
-First release of LeanPane: Lean 4 in Obsidian (desktop).
+LeanPane 0.1.1
 
-- Edit `.lean` files with live goals, errors and `sorry` markers from your installed Lean (elan + lake).
-- Interactive goal view (the official Lean infoview) with a plain-text fallback; messages drawer, outline, hover, go to definition, completion, Unicode input.
-- New Lean project / New Lean file; optional blueprint skeleton for use with TeXPane.
-- Optional integration with TeXPane: `\lean{Name}` chips coloured by the real proof status, blueprint progress.
-
-**Install:** download `main.js`, `manifest.json` and `styles.css` below into `<vault>/.obsidian/plugins/leanpane/`, then enable LeanPane under Settings → Community plugins.
-
-Requires Obsidian 1.8+ (desktop) and Lean via [elan](https://github.com/leanprover/elan).
+- New "Lean projects" sidebar panel (ribbon λ button, or the command "Open Lean projects"): lists every Lean project in the vault (folders with a lakefile) and loose .lean files, with a New menu (Lean project, Lean file), a filter box, and right-click actions: open, build, fetch Mathlib cache, trust, new file in project, reveal, delete (with confirmation, to the trash).
+- New setting "Lean projects folder" (default `Lean`): where New in the panel creates things.

@@ -33,6 +33,16 @@ export class LeanPaneSettingTab extends PluginSettingTab {
         }),
       );
 
+    new Setting(containerEl)
+      .setName("Lean projects folder")
+      .setDesc("Where New in the Lean projects panel creates projects and files (created if missing). Leave empty for the vault root.")
+      .addText((t) =>
+        t.setPlaceholder("Lean").setValue(s.projectsFolder).onChange(async (v) => {
+          s.projectsFolder = v.trim();
+          await save();
+        }),
+      );
+
     new Setting(containerEl).setName("Goals").setHeading();
     new Setting(containerEl)
       .setName("Goal view")

@@ -25,10 +25,11 @@ Open any `.lean` file (or run **New Lean file** / **New Lean project**). The fir
 - **Messages**: errors, warnings and info, plus the server log. F8 / Shift+F8 step through messages.
 - **Navigation**: F12 or Cmd/Ctrl+click goes to a definition (files outside the vault open read-only). The **Lean outline** view lists declarations.
 - **Unicode**: type `\alpha` then space (or Tab) for symbols. `\\` is a literal backslash.
+- **Lean projects panel**: click the λ ribbon button (or run **Open Lean projects**) for a sidebar listing every Lean project in the vault and loose `.lean` files. **New** creates a project or file in the *Lean projects folder* (setting, default `Lean`). Right-click for open, build, fetch Mathlib cache, trust, new file, reveal and delete.
 - **Projects**: **New Lean project** creates a plain or Mathlib project, optionally with a blueprint skeleton. Right-click a folder for **New Lean file** and **New Lean project here**. **Build project** and **Fetch Mathlib cache** stream their output.
 - **Status bar**: shows the server state, Lean version and sorry count; click for restart actions.
 
-Commands: restart file, restart server, build project, fetch Mathlib cache, new project, new file, toggle goals (Mod+Alt+G), toggle messages (Mod+Alt+L), cycle layout, jump to blueprint (Mod+Alt+B), add to blueprint, go to definition (F12), next / previous message (F8 / Shift+F8), open outline, re-check Lean.
+Commands: restart file, restart server, build project, fetch Mathlib cache, new project, new file, toggle goals (Mod+Alt+G), toggle messages (Mod+Alt+L), cycle layout, jump to blueprint (Mod+Alt+B), add to blueprint, go to definition (F12), next / previous message (F8 / Shift+F8), open outline, open Lean projects, re-check Lean.
 
 ## TeXPane integration
 
