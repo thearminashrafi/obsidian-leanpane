@@ -4,6 +4,8 @@ Write Lean 4 inside your Obsidian vault. LeanPane adds a `.lean` editor with liv
 
 It is designed to pair with [TeXPane](https://github.com/thearminashrafi/obsidian-texpane), the LaTeX plugin: write the proof in LaTeX, tag each lemma with its Lean name blueprint-style (`\lean{Name}`, `\leanok`, `\uses{...}`, compatible with [leanblueprint](https://pypi.org/project/leanblueprint/)), and LeanPane reports what Lean has actually verified. Each plugin also works on its own.
 
+> **Beta.** Automatically tested (including against a real Lean server), but young. Full walkthrough: **[User guide](docs/USER_GUIDE.md)**. Problems: [open an issue](../../issues/new/choose).
+
 ## Requirements
 
 - Obsidian 1.8 or newer, desktop (macOS, Linux, Windows). Mobile is not supported.
@@ -12,8 +14,11 @@ It is designed to pair with [TeXPane](https://github.com/thearminashrafi/obsidia
 
 ## Install
 
-1. Download `main.js`, `manifest.json` and `styles.css` from the latest release into `<vault>/.obsidian/plugins/leanpane/`.
-2. Enable LeanPane under Settings, Community plugins.
+**With BRAT (recommended; updates itself):** install the *Obsidian42 - BRAT* plugin, run "BRAT: Add a beta plugin for testing", paste `thearminashrafi/obsidian-leanpane`, then enable LeanPane under Settings, Community plugins.
+
+**By hand:** download `main.js`, `manifest.json` and `styles.css` from the [latest release](../../releases/latest) into `<vault>/.obsidian/plugins/leanpane/`, restart Obsidian and enable LeanPane.
+
+First time with Lean? Install it with elan (<https://lean-lang.org/install/>), then follow the [User guide](docs/USER_GUIDE.md) for a five-minute first project.
 
 Or use `scripts/add-leanpane.sh "/path/to/Vault"`, which keeps one shared copy and links it into any number of vaults (`--update` refreshes it).
 
