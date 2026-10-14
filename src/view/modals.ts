@@ -49,23 +49,38 @@ export class PromptModal extends Modal {
 
 /** "Trust this Lean project?" Resolves true only when the user presses the trust button. */
 export class TrustModal extends Modal {
+  private static readonly shown = new Set<TrustModal>();
   private answered = false;
-  constructor(app: App, private root: string, private toolchain: string | null, private done: (trusted: boolean) => void) {
+  constructor(app: App, private root: string, private toolchain: string | null, private done: (trusted: boolean) => void, private loose = false) {
     super(app);
   }
-  static ask(app: App, root: string, toolchain: string | null): Promise<boolean> {
-    return new Promise((resolve) => new TrustModal(app, root, toolchain, resolve).open());
+  /** `loose`: a Lean file outside any project; `root` is then its folder. */
+  static ask(app: App, root: string, toolchain: string | null, loose = false): Promise<boolean> {
+    return new Promise((resolve) => {
+      const m = new TrustModal(app, root, toolchain, resolve, loose);
+      TrustModal.shown.add(m);
+      m.open();
+    });
+  }
+  /** Dismiss every open trust prompt (plugin unload): each resolves as "not trusted". */
+  static closeAll(): void {
+    for (const m of [...TrustModal.shown]) m.close();
+    TrustModal.shown.clear();
   }
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    title(this, "Trust this Lean project?");
-    contentEl.createEl("p", { text: "LeanPane is about to start the Lean server for this project. Lakefiles and Lean files can run arbitrary code on your computer when they are built or elaborated, so only continue for projects you trust." });
+    title(this, this.loose ? "Trust this folder for Lean files?" : "Trust this Lean project?");
+    contentEl.createEl("p", {
+      text: this.loose
+        ? "LeanPane is about to start a Lean server for a Lean file that is not part of any Lean project. Lean files can run arbitrary code on your computer when they are elaborated (for example #eval), so only continue for files you trust."
+        : "LeanPane is about to start the Lean server for this project. Lakefiles and Lean files can run arbitrary code on your computer when they are built or elaborated, so only continue for projects you trust.",
+    });
     contentEl.createEl("p", { cls: "lp-trust-path" }).createEl("code", { text: this.root });
     if (this.toolchain) contentEl.createEl("p", { cls: "setting-item-description", text: `Toolchain: ${this.toolchain}. If it is not installed yet, elan downloads it on first use.` });
     new Setting(contentEl)
       .addButton((b) => b.setButtonText("Don't trust").onClick(() => this.finish(false)))
-      .addButton((b) => b.setButtonText("Trust and start Lean").setCta().onClick(() => this.finish(true)));
+      .addButton((b) => b.setButtonText(this.loose ? "Trust this folder and start Lean" : "Trust and start Lean").setCta().onClick(() => this.finish(true)));
   }
   private finish(v: boolean): void {
     if (this.answered) return;
@@ -74,6 +89,7 @@ export class TrustModal extends Modal {
     this.close();
   }
   onClose(): void {
+    TrustModal.shown.delete(this);
     if (!this.answered) {
       this.answered = true;
       this.done(false);

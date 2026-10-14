@@ -43,6 +43,12 @@ export interface StatusEngineDeps {
   /** Whole-project query for the given names (absolute project root). Never rejects (failures yield `unknown`). */
   runStatus(projectRoot: string, names: string[]): Promise<Record<string, DeclStatus>>;
   runList(projectRoot: string, prefix?: string): Promise<DeclSummary[]>;
+  /**
+   * Only trusted projects may be queried (the queries run `lake env lean`, which executes project code). For an
+   * untrusted project getStatus answers `unknown` and listDeclarations lists only live declarations, without spawning
+   * anything and without prompting. Default: every project is trusted (tests).
+   */
+  isTrusted?(projectRoot: string): boolean;
   now?: () => number;
   /** Cached "unknown" answers older than this are asked again (default 30 s). */
   unknownTtlMs?: number;
@@ -58,6 +64,10 @@ interface ProjectCache {
   live: Map<string, Map<string, LiveEntry>>;
   /** Tail of the serialised query queue. */
   queue: Promise<unknown>;
+  /** Declarations just written to a file that is not open (createStub): visible as live `stated` until a build sees them. */
+  pending: Map<string, LiveEntry>;
+  /** In-flight list queries by prefix. */
+  listing: Map<string, Promise<DeclSummary[]>>;
 }
 
 export class StatusEngine {
@@ -92,7 +102,7 @@ export class StatusEngine {
   private cache(root: string): ProjectCache {
     let c = this.projects.get(root);
     if (!c) {
-      c = { build: new Map(), asked: new Set(), live: new Map(), queue: Promise.resolve() };
+      c = { build: new Map(), asked: new Set(), live: new Map(), queue: Promise.resolve(), pending: new Map(), listing: new Map() };
       this.projects.set(root, c);
     }
     return c;
@@ -103,7 +113,21 @@ export class StatusEngine {
       const e = m.get(name);
       if (e) return e;
     }
-    return undefined;
+    return c.pending.get(name);
+  }
+
+  private trusted(projectRoot: string): boolean {
+    return this.deps.isTrusted ? this.deps.isTrusted(projectRoot) : true;
+  }
+
+  /**
+   * Register a declaration that was just appended to a file that is not open in an editor (createStub), so its status is
+   * `stated` (source live) immediately instead of `missing`/`unknown` until the next build.
+   */
+  registerPending(projectRoot: string, file: string, decl: LiveDecl): void {
+    const c = this.cache(projectRoot);
+    c.pending.set(decl.name, { decl, file });
+    this.emit(projectRoot, [decl.name]);
   }
 
   /** Live declarations of one project, newest information for each name. */
@@ -111,6 +135,7 @@ export class StatusEngine {
     const c = this.projects.get(projectRoot);
     if (!c) return [];
     const byName = new Map<string, LiveEntry>();
+    for (const [n, e] of c.pending) byName.set(n, e);
     for (const m of c.live.values()) for (const [n, e] of m) byName.set(n, e);
     return [...byName.values()];
   }
@@ -126,6 +151,8 @@ export class StatusEngine {
     for (const d of decls ?? []) next.set(d.name, { decl: d, file });
     if (decls === null) c.live.delete(file);
     else c.live.set(file, next);
+    // an editor now reports the file: it supersedes the pending stubs written to it
+    for (const [n, e] of [...c.pending]) if (e.file === file && decls !== null) c.pending.delete(n);
     const changed: string[] = [];
     for (const [n, e] of next) {
       const o = old.get(n);
@@ -140,7 +167,8 @@ export class StatusEngine {
     const c = this.cache(projectRoot);
     for (const n of names) c.asked.add(n);
     const now = this.now();
-    const need = names.filter((n) => {
+    const trusted = this.trusted(projectRoot);
+    const need = !trusted ? [] : names.filter((n) => {
       if (opts.refresh) return true;
       const live = this.liveEntry(c, n);
       if (live && live.decl.state !== "proved") return false;
@@ -151,7 +179,7 @@ export class StatusEngine {
     if (need.length > 0) await this.query(projectRoot, c, need);
     const out: Record<string, DeclStatus> = {};
     const t = this.now();
-    for (const n of names) out[n] = combineStatus(n, this.liveEntry(c, n), c.build.get(n), t);
+    for (const n of names) out[n] = combineStatus(n, this.liveEntry(c, n), trusted ? c.build.get(n) : undefined, t);
     return out;
   }
 
@@ -159,6 +187,7 @@ export class StatusEngine {
   private query(projectRoot: string, c: ProjectCache, names: string[]): Promise<void> {
     const run = async (): Promise<void> => {
       let res: Record<string, DeclStatus>;
+      if (!this.trusted(projectRoot)) return;
       try {
         res = await this.deps.runStatus(projectRoot, names);
       } catch {
@@ -183,7 +212,8 @@ export class StatusEngine {
     const c = this.cache(projectRoot);
     const names = [...c.asked];
     c.build.clear();
-    if (names.length > 0) await this.query(projectRoot, c, names);
+    c.pending.clear(); // the build has seen them (or they were never written)
+    if (names.length > 0 && this.trusted(projectRoot)) await this.query(projectRoot, c, names);
     this.emit(projectRoot, "all");
   }
 
@@ -196,11 +226,7 @@ export class StatusEngine {
   /** Declarations of the project's built modules (optionally filtered by name prefix) plus live declarations of open files. */
   async listDeclarations(projectRoot: string, prefix = ""): Promise<DeclSummary[]> {
     let built: DeclSummary[] = [];
-    try {
-      built = await this.deps.runList(projectRoot, prefix);
-    } catch {
-      built = [];
-    }
+    if (this.trusted(projectRoot)) built = await this.builtList(projectRoot, prefix);
     const byName = new Map<string, DeclSummary>();
     for (const d of built) byName.set(d.name, d);
     for (const e of this.liveDecls(projectRoot)) {
@@ -213,6 +239,28 @@ export class StatusEngine {
       });
     }
     return [...byName.values()].sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : a.line - b.line || (a.name < b.name ? -1 : 1)));
+  }
+
+  /** One list query per project and prefix at a time: concurrent callers share the in-flight promise; runs are serialised. */
+  private builtList(projectRoot: string, prefix: string): Promise<DeclSummary[]> {
+    const c = this.cache(projectRoot);
+    const existing = c.listing.get(prefix);
+    if (existing) return existing;
+    const run = async (): Promise<DeclSummary[]> => {
+      if (!this.trusted(projectRoot)) return [];
+      try {
+        return await this.deps.runList(projectRoot, prefix);
+      } catch {
+        return [];
+      }
+    };
+    const p = c.queue.then(run, run);
+    c.queue = p.catch(() => undefined);
+    const tracked = p.finally(() => {
+      if (c.listing.get(prefix) === tracked) c.listing.delete(prefix);
+    });
+    c.listing.set(prefix, tracked);
+    return tracked;
   }
 
   dispose(): void {

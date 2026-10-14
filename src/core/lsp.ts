@@ -234,12 +234,23 @@ export function symbolKindLabel(kind: number): string {
   }
 }
 
-/** `/-- ... -/` block for a docstring; "-/" inside the text cannot terminate it early. */
+/** `/-- ... -/` block for a docstring; neither "-/" (ends the comment) nor "/-" (nests a comment) can occur inside the text. */
 export function docComment(text: string): string {
-  const body = text.replace(/-\//g, "- /").trim();
+  const body = text.replace(/\/-/g, "/ -").replace(/-\//g, "- /").trim();
   if (body === "") return "";
   if (!body.includes("\n")) return `/-- ${body} -/\n`;
   return `/--\n${body}\n-/\n`;
+}
+
+/** Is this a plain (dotted) Lean identifier that is safe to splice into `theorem <name> : ...`? */
+export function isValidDeclName(name: string): boolean {
+  return /^[\p{L}_][\p{L}\p{N}_'!?\p{Mn}]*(\.[\p{L}_][\p{L}\p{N}_'!?\p{Mn}]*)*$/u.test(name);
+}
+
+/** Does the source text already declare `name` (`theorem name`, `def name`, ...)? A textual check, comments included. */
+export function declaresName(text: string, name: string): boolean {
+  const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?:^|[\\s@])(?:theorem|lemma|def|abbrev|instance|structure|inductive|class|axiom|opaque)\\s+${esc}(?![\\p{L}\\p{N}_'.!?])`, "mu").test(text);
 }
 
 /** Text appended to a Lean file for a new stub declaration. */

@@ -5,7 +5,9 @@ import {
   defaultBlueprintEnv,
   defaultBlueprintLabel,
   definitionTargets,
+  declaresName,
   docComment,
+  isValidDeclName,
   hoverMarkdown,
   isSorryWarning,
   pathToUri,
@@ -103,6 +105,8 @@ describe("stubs and blueprint defaults", () => {
     expect(docComment("A lemma.")).toBe("/-- A lemma. -/\n");
     expect(docComment("a\nb")).toBe("/--\na\nb\n-/\n");
     expect(docComment("ends -/ here")).toBe("/-- ends - / here -/\n");
+    expect(docComment("opens /- here")).toBe("/-- opens / - here -/\n"); // would start a nested comment
+    expect(docComment("/-/")).toBe("/-- / - / -/\n");
   });
   it("stubBlock is a sorry theorem with the docstring", () => {
     expect(stubBlock("Demo.lem_bound", "Bound it.")).toBe("/-- Bound it. -/\ntheorem Demo.lem_bound : sorry := by\n  sorry\n");
@@ -120,5 +124,21 @@ describe("stubs and blueprint defaults", () => {
     expect(defaultBlueprintLabel("Demo.Foo", "structure")).toBe("def:Foo");
     expect(defaultBlueprintEnv("def")).toBe("definition");
     expect(defaultBlueprintEnv("theorem")).toBe("lemma");
+  });
+});
+
+describe("stub name checks", () => {
+  it("isValidDeclName accepts dotted identifiers only", () => {
+    for (const n of ["x", "Proj.lem_bound", "Nat.add_comm'", "α.β₁", "A.b?"]) expect(isValidDeclName(n), n).toBe(true);
+    for (const n of ["", "a b", "a\ntheorem evil", "a:=b", ".a", "a.", "a..b", "1a", "a(b)", "a-b"]) expect(isValidDeclName(n), n).toBe(false);
+  });
+  it("declaresName finds declarations of exactly that name", () => {
+    const text = "import Foo\n\n/-- d -/\ntheorem P.a : True := trivial\nprivate def P.ab := 1\n@[simp] lemma P.c : True := trivial\n";
+    expect(declaresName(text, "P.a")).toBe(true);
+    expect(declaresName(text, "P.ab")).toBe(true);
+    expect(declaresName(text, "P.c")).toBe(true);
+    expect(declaresName(text, "P")).toBe(false);
+    expect(declaresName(text, "P.b")).toBe(false);
+    expect(declaresName(text, "P.a.x")).toBe(false);
   });
 });

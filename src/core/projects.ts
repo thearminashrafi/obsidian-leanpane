@@ -176,8 +176,9 @@ export function toProjectInfo(d: ProjectDescriptor, vaultBase: string): LeanProj
 }
 
 export class ProjectNotTrustedError extends Error {
-  constructor(public readonly project: ProjectDescriptor) {
-    super(`Project not trusted: ${project.root}`);
+  /** `project` is null for a loose file; `dir` is then the folder that was not trusted. */
+  constructor(public readonly project: ProjectDescriptor | null, public readonly dir: string = project?.root ?? "") {
+    super(project ? `Project not trusted: ${project.root}` : `Folder not trusted: ${dir}`);
     this.name = "ProjectNotTrustedError";
   }
 }
@@ -198,6 +199,11 @@ export interface RegistryDeps {
   findProject(dirAbs: string): Promise<ProjectDescriptor | null>;
   /** Called before the first server for a project is created. Resolve false => ProjectNotTrustedError. */
   ensureTrusted(project: ProjectDescriptor): Promise<boolean>;
+  /**
+   * Called before the first `lean --server` for a loose file (outside any project; Lean can run `#eval`) in a folder.
+   * Resolve false => ProjectNotTrustedError (with `project === null`).
+   */
+  ensureTrustedLoose(dir: string): Promise<boolean>;
   idleMinutes(): number;
   timers?: TimerApi;
   log?: Logger;
@@ -220,6 +226,7 @@ export class ProjectRegistry {
   private readonly trusting = new Map<string, Promise<boolean>>();
   private readonly timers: TimerApi;
   private readonly log: Logger;
+  private disposed = false;
 
   constructor(private readonly deps: RegistryDeps) {
     this.timers = deps.timers ?? {
@@ -231,18 +238,23 @@ export class ProjectRegistry {
 
   /** Server for the file's project (shared), started if needed. Concurrent calls for one project share one start(). */
   async acquire(fileAbsPath: string): Promise<ServerHandle> {
+    this.checkAlive();
     const dir = flavourFor(fileAbsPath).dirname(fileAbsPath);
     const project = await this.deps.findProject(dir);
+    this.checkAlive();
     const key = project ? project.root : "loose:" + dir;
 
     let entry = this.map.get(key);
-    if (!entry && project) {
+    if (!entry) {
       let trust = this.trusting.get(key);
       if (!trust) {
-        trust = this.deps.ensureTrusted(project).finally(() => this.trusting.delete(key));
+        const ask = project ? this.deps.ensureTrusted(project) : this.deps.ensureTrustedLoose(dir);
+        trust = ask.finally(() => this.trusting.delete(key));
         this.trusting.set(key, trust);
       }
-      if (!(await trust)) throw new ProjectNotTrustedError(project);
+      const ok = await trust;
+      this.checkAlive();
+      if (!ok) throw new ProjectNotTrustedError(project, project ? project.root : dir);
       // A concurrent acquire may have created the entry while we were waiting for the prompt.
       entry = this.map.get(key);
     }
@@ -259,6 +271,10 @@ export class ProjectRegistry {
     const e = entry;
     try {
       await this.ensureRunning(e);
+      if (this.disposed) {
+        e.server.stop().catch(() => undefined);
+        throw new Error("The Lean project registry was disposed.");
+      }
     } catch (err) {
       if (this.map.get(key) === e) this.map.delete(key);
       throw err;
@@ -286,8 +302,13 @@ export class ProjectRegistry {
     return [...this.map.values()].map((e) => ({ key: e.key, project: e.project, server: e.server, refs: e.refs }));
   }
 
-  /** Stop every server and clear all timers. */
+  private checkAlive(): void {
+    if (this.disposed) throw new Error("The Lean project registry was disposed.");
+  }
+
+  /** Stop every server and clear all timers. Nothing is started afterwards: pending `acquire` calls reject. */
   async dispose(): Promise<void> {
+    this.disposed = true;
     const all = [...this.map.values()];
     for (const e of all) this.cancelIdle(e);
     this.map.clear();

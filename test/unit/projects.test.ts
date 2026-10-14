@@ -131,11 +131,12 @@ class FakeServer implements ILeanServer {
   }
 }
 
-function setup(over: { trusted?: boolean; idle?: number } = {}) {
+function setup(over: { trusted?: boolean; looseTrusted?: boolean; idle?: number; trustGate?: Promise<boolean> } = {}) {
   const created: FakeServer[] = [];
   const proj: ProjectDescriptor = { root: "/v/proj", lakefile: "lakefile.toml", toolchain: "t", usesMathlib: false };
   const timers: Array<{ fn: () => void; ms: number; id: number; cleared: boolean }> = [];
   let nextId = 1;
+  const ensureLoose = vi.fn(async (_dir: string) => over.looseTrusted ?? true);
   const reg = new ProjectRegistry({
     factory: (spec) => {
       const s = new FakeServer(spec);
@@ -144,7 +145,8 @@ function setup(over: { trusted?: boolean; idle?: number } = {}) {
     },
     makeSpec: (p, dir) => ({ kind: p ? "lake" : "lean", command: p ? "lake" : "lean", args: [], cwd: p ? p.root : dir, env: {} }),
     findProject: async (dir) => (dir.startsWith("/v/proj") ? proj : dir.startsWith("/v/other") ? { ...proj, root: "/v/other" } : null),
-    ensureTrusted: vi.fn(async () => over.trusted ?? true),
+    ensureTrusted: vi.fn(async () => (over.trustGate ? over.trustGate : (over.trusted ?? true))),
+    ensureTrustedLoose: ensureLoose,
     idleMinutes: () => over.idle ?? 10,
     timers: {
       setTimeout: (fn, ms) => {
@@ -159,7 +161,7 @@ function setup(over: { trusted?: boolean; idle?: number } = {}) {
     },
   });
   const fire = () => timers.filter((t) => !t.cleared).forEach((t) => ((t.cleared = true), t.fn()));
-  return { reg, created, timers, fire, proj };
+  return { reg, created, timers, fire, proj, ensureLoose };
 }
 
 describe("ProjectRegistry", () => {
@@ -176,8 +178,8 @@ describe("ProjectRegistry", () => {
     expect(c.server).not.toBe(a.server);
   });
 
-  it("files outside any project share a `lean --server` per folder, no trust prompt", async () => {
-    const { reg, created } = setup();
+  it("files outside any project share a `lean --server` per folder, trusted once per folder", async () => {
+    const { reg, created, ensureLoose } = setup();
     const x = await reg.acquire("/v/loose/x.lean");
     const y = await reg.acquire("/v/loose/y.lean");
     const z = await reg.acquire("/v/elsewhere/z.lean");
@@ -185,6 +187,28 @@ describe("ProjectRegistry", () => {
     expect(x.server).toBe(y.server);
     expect(z.server).not.toBe(x.server);
     expect(created[0].spec.kind).toBe("lean");
+    expect(ensureLoose.mock.calls.map((c) => c[0])).toEqual(["/v/loose", "/v/elsewhere"]);
+  });
+
+  it("a loose folder that is not trusted starts no `lean --server` (it could #eval)", async () => {
+    const { reg, created } = setup({ looseTrusted: false });
+    const err = await reg.acquire("/v/loose/x.lean").catch((e) => e);
+    expect(err).toBeInstanceOf(ProjectNotTrustedError);
+    expect(err.project).toBeNull();
+    expect(err.dir).toBe("/v/loose");
+    expect(created.length).toBe(0);
+  });
+
+  it("after dispose() acquire spawns nothing, and an acquire waiting for the trust prompt is refused", async () => {
+    let answer!: (v: boolean) => void;
+    const { reg, created } = setup({ trustGate: new Promise<boolean>((r) => (answer = r)) });
+    const pending = reg.acquire("/v/proj/A.lean");
+    await new Promise((r) => setTimeout(r, 0));
+    await reg.dispose();
+    answer(true);
+    await expect(pending).rejects.toThrow(/disposed/);
+    await expect(reg.acquire("/v/proj/B.lean")).rejects.toThrow(/disposed/);
+    expect(created.length).toBe(0);
   });
 
   it("asks for trust once per acquire of an unstarted project; refusal throws and creates no server", async () => {

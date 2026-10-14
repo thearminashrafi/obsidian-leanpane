@@ -125,3 +125,76 @@ describe("StatusEngine", () => {
     expect((await e.listDeclarations("/p", "P.")).map((d) => d.name).sort()).toEqual(["P.new_one", "P.old"]);
   });
 });
+
+describe("StatusEngine trust gating", () => {
+  function gated(trusted: { v: boolean }) {
+    const spawned = { status: 0, list: 0 };
+    const e = new StatusEngine({
+      isTrusted: () => trusted.v,
+      runStatus: async (_r, names) => (spawned.status++, Object.fromEntries(names.map((n) => [n, build(n, "proved")]))),
+      runList: async () => (spawned.list++, [{ name: "P.old", kind: "theorem", file: "/p/P.lean", line: 2 }]),
+    });
+    return { e, spawned };
+  }
+  it("an untrusted project answers unknown / empty and spawns nothing", async () => {
+    const trusted = { v: false };
+    const { e, spawned } = gated(trusted);
+    const r = await e.getStatus("/p", ["P.a"], { refresh: true });
+    expect(r["P.a"]).toMatchObject({ state: "unknown", source: "none" });
+    expect(await e.listDeclarations("/p")).toEqual([]);
+    await e.refreshAfterBuild("/p");
+    expect(spawned).toEqual({ status: 0, list: 0 });
+    // live information of open files still works, and the unknown answer was not cached
+    e.setLive("/p", "/p/P.lean", [live("P.b", "stated")]);
+    expect((await e.getStatus("/p", ["P.b"]))["P.b"].state).toBe("stated");
+    trusted.v = true;
+    e.invalidate("/p");
+    expect((await e.getStatus("/p", ["P.a"]))["P.a"].state).toBe("proved");
+    expect(spawned.status).toBe(1);
+  });
+  it("a query already queued when trust is revoked does not run", async () => {
+    const trusted = { v: true };
+    const { e, spawned } = gated(trusted);
+    const p = e.getStatus("/p", ["P.a"]);
+    trusted.v = false;
+    expect((await p)["P.a"].state).toBe("unknown");
+    expect(spawned.status).toBe(0);
+  });
+});
+
+describe("StatusEngine list queries and pending stubs", () => {
+  it("concurrent listDeclarations share one in-flight query per prefix; different prefixes run one at a time", async () => {
+    let running = 0;
+    let max = 0;
+    let calls = 0;
+    const e = new StatusEngine({
+      runStatus: async () => ({}),
+      runList: async () => {
+        calls++;
+        running++;
+        max = Math.max(max, running);
+        await new Promise((r) => setTimeout(r, 15));
+        running--;
+        return [];
+      },
+    });
+    await Promise.all([e.listDeclarations("/p"), e.listDeclarations("/p"), e.listDeclarations("/p", "A."), e.listDeclarations("/p", "B.")]);
+    expect(calls).toBe(3);
+    expect(max).toBe(1);
+    await e.listDeclarations("/p");
+    expect(calls).toBe(4); // finished promises are not cached
+  });
+  it("registerPending makes a name `stated` (live) at once, notifies, and is superseded by the open file", async () => {
+    const e = engineWith({});
+    const events: Array<string[] | "all"> = [];
+    e.onStatusChanged((_r, n) => events.push(n));
+    e.registerPending("/p", "/p/New.lean", live("P.stub", "stated", 3));
+    expect(events).toEqual([["P.stub"]]);
+    expect((await e.getStatus("/p", ["P.stub"]))["P.stub"]).toMatchObject({ state: "stated", source: "live", file: "/p/New.lean", line: 4 });
+    expect((await e.listDeclarations("/p")).find((d) => d.name === "P.stub")).toMatchObject({ file: "/p/New.lean", line: 4 });
+    e.setLive("/p", "/p/New.lean", [live("P.stub", "proved", 3)]);
+    expect((await e.getStatus("/p", ["P.stub"]))["P.stub"].state).toBe("proved");
+    e.setLive("/p", "/p/New.lean", null);
+    expect((await e.getStatus("/p", ["P.stub"]))["P.stub"].state).not.toBe("stated"); // pending entry was dropped
+  });
+});

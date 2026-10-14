@@ -52,6 +52,8 @@ export interface WorkbenchOptions {
   readOnly: boolean;
   /** The user typed in the editor (not a load from disk). */
   onUserEdit?(): void;
+  /** The document changed for any reason (typing, load, API edit). Lets the view keep its `data` current. */
+  onDocChanged?(): void;
   /** Mod+S */
   onSaveKey?(): void;
   /** Status, counts or declarations changed. */
@@ -222,6 +224,7 @@ export class LeanWorkbench {
         // one LSP change list per transaction, in order
         for (const tr of u.transactions) if (tr.docChanged) session.edit(changesToLsp(tr.startState.doc, tr.changes), tr.state.doc.toString());
       }
+      this.o.onDocChanged?.();
       if (!u.transactions.some((t) => t.annotation(External))) this.o.onUserEdit?.();
     }
     if (u.selectionSet || u.docChanged) this.wbOnCursor();
@@ -389,8 +392,11 @@ export class LeanWorkbench {
           GoalsPane.makeCard({
             icon: "shield-alert",
             title: "This Lean project is not trusted",
-            lines: ["LeanPane did not start Lean because the project was not trusted."],
-            buttons: [{ text: "Trust and start Lean", cta: true, onClick: () => void this.wbReattach() }],
+            lines: [
+              "LeanPane did not start Lean because this project (or, for a file outside any project, its folder) was not trusted. Lean files and lakefiles can run code on your computer.",
+              "Trust it now, or later with the command \"Trust this Lean project\".",
+            ],
+            buttons: [{ text: "Trust and start Lean", cta: true, onClick: () => void this.plugin.trustActiveProject(this) }],
           }),
         );
         break;
@@ -414,6 +420,11 @@ export class LeanWorkbench {
     }
     this.drawer.refreshServerLog();
     this.o.onChanged?.();
+  }
+
+  /** The user trusted the project (or folder) since this file was refused: start Lean now. */
+  retryIfUntrusted(): void {
+    if (!this.destroyed && this.filePath && this.session?.currentPhase === "untrusted") void this.wbReattach();
   }
 
   private async wbRecheck(): Promise<void> {

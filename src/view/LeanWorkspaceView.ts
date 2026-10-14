@@ -56,6 +56,10 @@ export class LeanWorkspaceView extends TextFileView {
       component: this,
       readOnly: false,
       onUserEdit: () => this.leanOnUserEdit(),
+      onDocChanged: () => {
+        // keep `data` current on every change: Obsidian reads it (not getViewData) in some save paths
+        if (this.wb) this.data = this.wb.getText();
+      },
       onSaveKey: () => this.leanSaveNow(),
       onChanged: () => {
         this.headerActions?.update();
@@ -69,6 +73,15 @@ export class LeanWorkspaceView extends TextFileView {
   }
 
   async onClose(): Promise<void> {
+    // flush unsaved edits BEFORE the editor is destroyed (the debounced save may not have fired yet)
+    if (this.wb) this.data = this.wb.getText();
+    if (this.file && this.data !== this.diskData) {
+      try {
+        await this.save();
+      } catch (e) {
+        this.plugin.log(`could not save ${this.file.path} on close: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
     this.wb?.destroy();
     this.wb = null;
     this.headerActions = null;
@@ -76,7 +89,8 @@ export class LeanWorkspaceView extends TextFileView {
 
   // ---------------------------------------------------------------- TextFileView contract
   getViewData(): string {
-    return this.wb ? this.wb.getText() : this.data;
+    if (this.wb) this.data = this.wb.getText();
+    return this.data;
   }
 
   setViewData(data: string, clear: boolean): void {

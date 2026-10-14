@@ -11,6 +11,8 @@ import { StatusEngine } from "./core/statusEngine";
 import { runListQuery, runStatusQuery } from "./core/statusQuery";
 import { UnicodeEngine } from "./core/unicode";
 import { runStreaming } from "./core/runner";
+import { killAllQueries } from "./core/execTree";
+import { resolveVaultFolder } from "./core/paths";
 import { killServerProcesses } from "./core/shutdown";
 import { createLeanProject, ProjectCreateError } from "./core/projectCreate";
 import { defaultBlueprintEnv, defaultBlueprintLabel, symbolKindLabel, uriToPath } from "./core/lsp";
@@ -32,6 +34,7 @@ import { EXTERNAL_VIEW_TYPE, LeanExternalView } from "./view/LeanExternalView";
 import { OUTLINE_TYPE, OutlineView } from "./view/OutlineView";
 import type { LeanWorkbench } from "./view/LeanWorkbench";
 import { AddToBlueprintModal } from "./view/AddToBlueprintModal";
+import { findLeaf } from "./view/leafLookup";
 import { NewProjectModal } from "./view/NewProjectModal";
 import { ProgressModal, TrustModal } from "./view/modals";
 
@@ -42,8 +45,15 @@ type LeanView = LeanWorkspaceView | LeanExternalView;
 
 export default class LeanPanePlugin extends Plugin {
   settings: LeanPaneSettings = { ...DEFAULT_SETTINGS };
-  /** The cross-plugin API (SPEC section 6); other plugins read `app.plugins.plugins.leanpane.api`. */
-  api!: LeanPaneApiV1;
+  private apiImpl: LeanPaneApiV1 | null = null;
+  private apiAvailable = false;
+  /**
+   * The cross-plugin API (SPEC section 6); other plugins read `app.plugins.plugins.leanpane.api`. Reads as undefined
+   * once unloading has started, so a consumer reacting to `leanpane:api-unload` does not find a dying API.
+   */
+  get api(): LeanPaneApiV1 | undefined {
+    return this.apiAvailable && this.apiImpl ? this.apiImpl : undefined;
+  }
   statusEngine!: StatusEngine;
   registry!: ProjectRegistry;
 
@@ -57,18 +67,23 @@ export default class LeanPanePlugin extends Plugin {
   private refsCache = new Map<string, Promise<BlueprintRef[]>>();
   private tpUnsubscribe: (() => void) | null = null;
   private unloading = false;
+  /** TeXPane announced `texpane:api-unload`: its API counts as gone until it announces itself again. */
+  private texpaneGone = false;
 
   async onload(): Promise<void> {
     await this.loadSettings();
     addIcon("leanpane-lambda", LAMBDA_ICON);
 
     this.statusEngine = new StatusEngine({
+      isTrusted: (root) => this.isTrusted(root),
       runStatus: async (root, names) => {
         const info = await this.ensureElan();
+        if (!this.isTrusted(root)) return {};
         return runStatusQuery({ projectRoot: root, lakePath: info.lakePath ?? "lake", env: buildEnv(info, process.env), names });
       },
       runList: async (root, prefix) => {
         const info = await this.ensureElan();
+        if (!this.isTrusted(root)) return [];
         return runListQuery({ projectRoot: root, lakePath: info.lakePath ?? "lake", env: buildEnv(info, process.env), prefix });
       },
     });
@@ -86,11 +101,12 @@ export default class LeanPanePlugin extends Plugin {
       makeSpec: (project, dir) => makeServerSpec(this.elan ?? { binDir: null, lakePath: null, leanPath: null, elanPath: null, toolchains: [] }, project, dir, process.env),
       findProject: (dir) => this.findProjectDescriptor(dir),
       ensureTrusted: (p) => this.ensureTrusted(p),
+      ensureTrustedLoose: (dir) => this.ensureTrustedLoose(dir),
       idleMinutes: () => this.settings.idleShutdownMinutes,
       log: (m) => this.log(m),
     });
 
-    this.api = createLeanPaneApi({
+    this.apiImpl = createLeanPaneApi({
       vaultBase: () => this.basePath(),
       findProject: (dir) => this.findProjectDescriptor(dir),
       isDirectory: async (abs) => {
@@ -105,6 +121,7 @@ export default class LeanPanePlugin extends Plugin {
       readFile: (abs) => this.readLeanText(abs),
       writeFile: (abs, text) => this.writeLeanText(abs, text),
     });
+    this.apiAvailable = true;
 
     this.registerView(VIEW_TYPE, (leaf) => new LeanWorkspaceView(leaf, this));
     this.registerView(EXTERNAL_VIEW_TYPE, (leaf) => new LeanExternalView(leaf, this));
@@ -148,13 +165,19 @@ export default class LeanPanePlugin extends Plugin {
     this.app.workspace.onLayoutReady(() => {
       void this.ensureElan();
       this.hookTeXPane();
-      (this.app.workspace as unknown as { trigger(name: string): void }).trigger(LEANPANE_READY_EVENT);
+      // deferred: `app.plugins.plugins.leanpane` is only set once onload has returned
+      window.setTimeout(() => {
+        if (!this.unloading) (this.app.workspace as unknown as { trigger(name: string): void }).trigger(LEANPANE_READY_EVENT);
+      }, 0);
     });
   }
 
   onunload(): void {
     this.unloading = true;
+    this.apiAvailable = false; // `plugin.api` reads as unavailable BEFORE listeners hear about the unload
     (this.app.workspace as unknown as { trigger(name: string): void }).trigger(LEANPANE_UNLOAD_EVENT);
+    TrustModal.closeAll();
+    killAllQueries();
     this.tpUnsubscribe?.();
     this.tpUnsubscribe = null;
     this.killAllServers();
@@ -188,9 +211,6 @@ export default class LeanPanePlugin extends Plugin {
   private vaultRel(abs: string): string | null {
     const rel = path.relative(this.basePath(), abs);
     return rel.startsWith("..") || path.isAbsolute(rel) ? null : rel.split(path.sep).join("/");
-  }
-  private absOf(vaultPath: string): string {
-    return path.join(this.basePath(), ...vaultPath.split("/"));
   }
 
   elanInfo(): ElanInfo | null {
@@ -230,14 +250,54 @@ export default class LeanPanePlugin extends Plugin {
     return found ? describeProject(found.root, found.lakefile, nodeFs) : null;
   }
 
-  private async ensureTrusted(p: ProjectDescriptor): Promise<boolean> {
-    if (this.settings.trustedProjects.includes(p.root)) return true;
-    const ok = await TrustModal.ask(this.app, p.root, p.toolchain);
-    if (ok) {
-      this.settings.trustedProjects.push(p.root);
+  // ------------------------------------------------------------------ trust
+  /** Trusted entries are project roots, or `loose:<folder>` for Lean files outside any project. */
+  isTrusted(key: string): boolean {
+    return this.settings.trustedProjects.includes(key);
+  }
+
+  private async trustDecision(key: string, ask: () => Promise<boolean>): Promise<boolean> {
+    if (this.isTrusted(key)) return true;
+    if (this.unloading) return false;
+    const ok = await ask();
+    if (ok && !this.unloading) {
+      if (!this.isTrusted(key)) this.settings.trustedProjects.push(key);
       await this.saveSettings();
+      this.onTrustGranted(key);
     }
     return ok;
+  }
+
+  private ensureTrusted(p: ProjectDescriptor): Promise<boolean> {
+    return this.trustDecision(p.root, () => TrustModal.ask(this.app, p.root, p.toolchain));
+  }
+
+  /** `lean --server` for a file outside any project can run #eval: trust is per containing folder. */
+  private ensureTrustedLoose(dir: string): Promise<boolean> {
+    return this.trustDecision("loose:" + dir, () => TrustModal.ask(this.app, dir, null, true));
+  }
+
+  /** Statuses become available and views that were refused start Lean. */
+  private onTrustGranted(key: string): void {
+    if (!key.startsWith("loose:")) this.statusEngine?.invalidate(key);
+    for (const wb of this.workbenches) wb.retryIfUntrusted();
+  }
+
+  /** Command "Trust this Lean project": ask about the project (or folder) of the active Lean file. */
+  async trustActiveProject(wb: LeanWorkbench | null = this.activeWorkbench()): Promise<void> {
+    const file = wb?.currentFile();
+    if (!file) {
+      new Notice("LeanPane: open a Lean file first.");
+      return;
+    }
+    const dir = path.dirname(file);
+    const project = await this.findProjectDescriptor(dir);
+    const key = project ? project.root : "loose:" + dir;
+    if (this.isTrusted(key)) {
+      new Notice(`LeanPane: ${project ? "this project" : "this folder"} is already trusted.`);
+      return;
+    }
+    if (project ? await this.ensureTrusted(project) : await this.ensureTrustedLoose(dir)) new Notice("LeanPane: trusted. Lean is starting.");
   }
 
   /** A session for one open file. The workbench opens it; see LeanSession. */
@@ -262,6 +322,7 @@ export default class LeanPanePlugin extends Plugin {
   }
 
   killAllServers(): void {
+    killAllQueries();
     if (!this.registry) return;
     killServerProcesses(this.registry.entries().map((e) => e.server));
   }
@@ -342,20 +403,30 @@ export default class LeanPanePlugin extends Plugin {
     const file = rel !== null ? this.app.vault.getAbstractFileByPath(rel) : null;
     try {
       if (file instanceof TFile) {
-        const existing = this.leanWorkspaceViews().find((v) => v.file === file);
+        const existing = await findLeaf(
+          ws.getLeavesOfType(VIEW_TYPE),
+          (v): v is LeanWorkspaceView => v instanceof LeanWorkspaceView,
+          (v) => v.file === file,
+          (st) => st.file === file.path,
+        );
         if (existing) {
           void ws.revealLeaf(existing.leaf);
-          if (o.line) existing.revealLine(o.line, o.column);
+          if (o.line) existing.view.revealLine(o.line, o.column);
           return true;
         }
         const leaf = o.split ? ws.getLeaf("split") : o.newLeaf === false ? ws.getLeaf(false) : ws.getLeaf("tab");
         await leaf.openFile(file, o.line ? { eState: { line: o.line - 1, column: o.column ? o.column - 1 : undefined } } : undefined);
         return true;
       }
-      const existingExt = this.leanExternalViews().find((v) => v.filePath() === abs);
+      const existingExt = await findLeaf(
+        ws.getLeavesOfType(EXTERNAL_VIEW_TYPE),
+        (v): v is LeanExternalView => v instanceof LeanExternalView,
+        (v) => v.filePath() === abs,
+        (st) => st.path === abs,
+      );
       if (existingExt) {
         void ws.revealLeaf(existingExt.leaf);
-        if (o.line) existingExt.revealLine(o.line, o.column);
+        if (o.line) existingExt.view.revealLine(o.line, o.column);
         return true;
       }
       try {
@@ -403,6 +474,7 @@ export default class LeanPanePlugin extends Plugin {
     const wb = this.workbenchForPath(abs);
     if (wb) {
       const ed = wb.getEditor();
+      if (ed.state.readOnly) throw new Error(`${abs} is open read-only in LeanPane and cannot be edited.`);
       const old = ed.state.doc.toString();
       if (text.startsWith(old)) ed.dispatch({ changes: { from: old.length, insert: text.slice(old.length) }, userEvent: "input" });
       else ed.dispatch({ changes: { from: 0, to: old.length, insert: text }, userEvent: "input" });
@@ -432,7 +504,7 @@ export default class LeanPanePlugin extends Plugin {
 
   // ------------------------------------------------------------------ TeXPane integration (feature-detected every time)
   texpaneApi(): TeXPaneApiV1 | null {
-    return getTeXPaneApi(this.app);
+    return this.texpaneGone ? null : getTeXPaneApi(this.app);
   }
 
   /** Blueprint places that mention a Lean declaration; [] without TeXPane. Cached until the blueprint changes. */
@@ -450,6 +522,7 @@ export default class LeanPanePlugin extends Plugin {
   private hookTeXPane(): void {
     const ws = this.app.workspace as unknown as { on(name: string, cb: () => void): EventRef };
     const resubscribe = (): void => {
+      this.texpaneGone = false;
       this.tpUnsubscribe?.();
       this.tpUnsubscribe = null;
       this.refsCache.clear();
@@ -466,6 +539,7 @@ export default class LeanPanePlugin extends Plugin {
     this.registerEvent(ws.on(TEXPANE_READY_EVENT, resubscribe));
     this.registerEvent(
       ws.on(TEXPANE_UNLOAD_EVENT, () => {
+        this.texpaneGone = true; // its API is gone immediately, whatever `app.plugins` still says
         this.tpUnsubscribe = null; // the plugin is gone; its unsubscribe function is not needed
         this.refsCache.clear();
         this.onBlueprintChanged();
@@ -560,6 +634,16 @@ export default class LeanPanePlugin extends Plugin {
         return true;
       },
     });
+    this.addCommand({
+      id: "trust-project",
+      name: "Trust this Lean project",
+      icon: "shield-check",
+      checkCallback: (checking) => {
+        if (!this.activeWorkbench()?.currentFile() || !this.activeLeanView()) return false;
+        if (!checking) void this.trustActiveProject();
+        return true;
+      },
+    });
     this.addCommand({ id: "new-project", name: "New Lean project", icon: "folder-plus", callback: () => this.newLeanProject(this.defaultFolder()) });
     this.addCommand({ id: "new-file", name: "New Lean file", icon: "file-plus", callback: () => void this.newLeanFile(this.defaultFolder()) });
     this.addCommand({
@@ -646,6 +730,11 @@ export default class LeanPanePlugin extends Plugin {
   }
 
   private async createProject(req: { folder: string; name: string; mathlib: boolean; blueprint: boolean }): Promise<void> {
+    const parentDir = resolveVaultFolder(this.basePath(), req.folder);
+    if (parentDir === null || !this.basePath()) {
+      new Notice("LeanPane: the location must be a folder inside the vault.", 8000);
+      return;
+    }
     const info = await this.ensureElan();
     if (!info.lakePath) {
       new Notice("LeanPane: lake was not found. Install Lean through elan, or set its folder in Settings → LeanPane.", 10000);
@@ -656,7 +745,7 @@ export default class LeanPanePlugin extends Plugin {
     modal.setStatus(req.mathlib ? "Creating the project and downloading the Mathlib cache…" : "Creating the project…");
     try {
       const res = await createLeanProject({
-        parentDir: this.absOf(req.folder),
+        parentDir,
         name: req.name,
         mathlib: req.mathlib,
         blueprint: req.blueprint,
@@ -697,7 +786,19 @@ export default class LeanPanePlugin extends Plugin {
   }
 
   // ------------------------------------------------------------------ build / cache
+  /** `lake build` / `lake exe cache get` run project code: only for trusted projects (asks, as the user started it). */
+  private async trustedForLake(root: string): Promise<boolean> {
+    if (this.isTrusted(root)) return true;
+    const project = await this.findProjectDescriptor(root);
+    if (!project) return false;
+    return this.ensureTrusted(project);
+  }
+
   async buildProject(root: string): Promise<void> {
+    if (!(await this.trustedForLake(root))) {
+      new Notice("LeanPane: the project is not trusted, so it was not built.");
+      return;
+    }
     const ok = await this.runLake(`Build ${path.basename(root)}`, ["build"], root);
     if (!ok) return;
     await this.statusEngine.refreshAfterBuild(root);
@@ -705,6 +806,10 @@ export default class LeanPanePlugin extends Plugin {
   }
 
   async fetchMathlibCache(root: string): Promise<void> {
+    if (!(await this.trustedForLake(root))) {
+      new Notice("LeanPane: the project is not trusted, so the cache was not fetched.");
+      return;
+    }
     const ok = await this.runLake("Fetch Mathlib cache", MATHLIB_CACHE_ARGS, root);
     if (ok) this.statusEngine.invalidate(root);
   }

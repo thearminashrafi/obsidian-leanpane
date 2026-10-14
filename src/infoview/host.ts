@@ -52,7 +52,9 @@ interface RpcSessionEntry {
 
 export class InfoviewHost {
   private readonly opts: InfoviewHostOptions;
-  private readonly win: Window;
+  /** The window whose "message" events we listen to: the container's CURRENT window (a leaf can move to a popout). */
+  private listenWin: Window | undefined;
+  private loads = 0;
   private iframe: HTMLIFrameElement | undefined;
   private rpc: Rpc | undefined;
   private api: InfoviewApi | undefined;
@@ -86,7 +88,6 @@ export class InfoviewHost {
 
   constructor(opts: InfoviewHostOptions) {
     this.opts = opts;
-    this.win = opts.container.ownerDocument.defaultView ?? window;
     this.syncServerSubscriptions();
   }
 
@@ -114,6 +115,7 @@ export class InfoviewHost {
   /** Cursor moved / file switched: forwards `changedCursorLocation`. `initialize` happens on the first call. */
   setCursor(uri: string, pos: Position): void {
     if (this.disposed || this.failed) return;
+    this.attachWindow();
     this.cursor = { uri, position: pos };
     this.syncServerSubscriptions();
     if (!this.ready || !this.api) return;
@@ -156,6 +158,7 @@ export class InfoviewHost {
   /** Re-read Obsidian's theme variables and push them into the iframe (call on the workspace "css-change" event). */
   refreshTheme(): void {
     if (this.disposed || this.failed || !this.iframe) return;
+    this.attachWindow();
     const t = this.computeTheme();
     this.post({ lp: "theme", themeCss: t.css, dark: t.dark });
   }
@@ -192,9 +195,42 @@ export class InfoviewHost {
     iframe.style.cssText = "width:100%;height:100%;border:0;display:block;background:transparent;";
     iframe.srcdoc = frameHtml(infoviewAssets.webviewJs);
     this.messageListener = (ev: MessageEvent) => this.onWindowMessage(ev);
-    this.win.addEventListener("message", this.messageListener);
+    this.attachWindow();
     this.iframe = iframe;
+    iframe.addEventListener?.("load", () => this.onFrameLoad());
     this.opts.container.appendChild(iframe);
+  }
+
+  private currentWindow(): Window {
+    return this.opts.container.ownerDocument.defaultView ?? window;
+  }
+
+  /** Listen on the container's current window; moves the listener when the leaf was dragged to another window. */
+  private attachWindow(): boolean {
+    const win = this.currentWindow();
+    if (win === this.listenWin || !this.messageListener) return false;
+    this.listenWin?.removeEventListener("message", this.messageListener);
+    win.addEventListener("message", this.messageListener);
+    this.listenWin = win;
+    return true;
+  }
+
+  /**
+   * The iframe (re)loaded: first load, or the leaf moved to another window / was re-parented, which restarts the frame.
+   * Re-attach the message listener to the new window (reloading once more if the new frame's "hello" may have been
+   * missed) and, if the frame was ready before, wait for it to say hello/ready again - else fall back to plain goals.
+   */
+  private onFrameLoad(): void {
+    if (this.disposed || this.failed || !this.iframe) return;
+    const reload = this.loads++ > 0;
+    const moved = this.attachWindow();
+    if (!reload && !moved) return;
+    this.ready = false;
+    this.initializedFrame = false;
+    this.api = undefined;
+    if (this.readyTimer) clearTimeout(this.readyTimer);
+    this.readyTimer = setTimeout(() => this.fail(`the infoview did not restart within ${READY_TIMEOUT_MS / 1000} s`), READY_TIMEOUT_MS);
+    if (moved) this.iframe.srcdoc = frameHtml(infoviewAssets.webviewJs); // our listener missed this load's hello: load again
   }
 
   private onWindowMessage(ev: MessageEvent): void {
@@ -292,8 +328,9 @@ export class InfoviewHost {
     this.readyTimer = undefined;
     if (this.keepAliveTimer) clearInterval(this.keepAliveTimer);
     this.keepAliveTimer = undefined;
-    if (this.messageListener) this.win.removeEventListener("message", this.messageListener);
+    if (this.messageListener) this.listenWin?.removeEventListener("message", this.messageListener);
     this.messageListener = undefined;
+    this.listenWin = undefined;
     this.rpc?.dispose();
     this.rpc = undefined;
     this.api = undefined;

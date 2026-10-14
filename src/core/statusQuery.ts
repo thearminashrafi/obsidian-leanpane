@@ -8,7 +8,7 @@ import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { DeclState, DeclStatus, DeclSummary, ExecFn, QueryRecord } from "../types";
-import { defaultExec } from "./nodeio";
+import { treeExec } from "./execTree";
 import { STATUS_QUERY_LEAN } from "./statusQuery.lean";
 
 const CHUNK_SIZE = 100;
@@ -40,14 +40,41 @@ async function collectLeanFiles(dir: string, rel: string[], out: string[][]): Pr
   }
 }
 
-/** Project modules (dotted names) that have a built .olean under .lake/build/lib/lean. Sorted. */
-export async function discoverModules(projectRoot: string): Promise<string[]> {
+export interface ModuleScan {
+  /** Modules (dotted names) with a built .olean under .lake/build/lib/lean, sorted. */
+  built: string[];
+  /**
+   * True when some project source has no .olean or one older than the source: names missing from the built modules may
+   * simply not be built yet, so "not found" must not be reported as `missing`.
+   */
+  stale: boolean;
+}
+
+/** Scan the project's sources against their oleans. A root-level `Main.lean` (executable root) is ignored. */
+export async function scanModules(projectRoot: string): Promise<ModuleScan> {
   const found: string[][] = [];
   await collectLeanFiles(projectRoot, [], found);
-  const built = await Promise.all(
-    found.map(async (parts) => ((await exists(path.join(projectRoot, ".lake", "build", "lib", "lean", ...parts) + ".olean")) ? parts.join(".") : undefined)),
+  const built: string[] = [];
+  let stale = false;
+  await Promise.all(
+    found.map(async (parts) => {
+      const olean = path.join(projectRoot, ".lake", "build", "lib", "lean", ...parts) + ".olean";
+      const src = path.join(projectRoot, ...parts) + ".lean";
+      try {
+        const [o, s] = await Promise.all([fsp.stat(olean), fsp.stat(src)]);
+        built.push(parts.join("."));
+        if (o.mtimeMs < s.mtimeMs) stale = true;
+      } catch {
+        if (!(parts.length === 1 && parts[0] === "Main")) stale = true;
+      }
+    }),
   );
-  return built.filter((m): m is string => m !== undefined).sort();
+  return { built: built.sort(), stale };
+}
+
+/** Project modules (dotted names) that have a built .olean under .lake/build/lib/lean. Sorted. */
+export async function discoverModules(projectRoot: string): Promise<string[]> {
+  return (await scanModules(projectRoot)).built;
 }
 
 /** Absolute .lean path for a module: project first, then .lake/packages/*; undefined when not found. */
@@ -138,6 +165,8 @@ export interface QueryCommon {
   env: NodeJS.ProcessEnv;
   /** Modules to import; default discoverModules(projectRoot). [] => nothing can be answered. */
   modules?: string[];
+  /** Some project sources are unbuilt or newer than their .olean (default: scanned when `modules` is not given, else false). */
+  stale?: boolean;
   timeoutMs?: number;
   signal?: AbortSignal;
   /** Where the query file is written (default os.tmpdir()). */
@@ -149,12 +178,13 @@ export interface StatusQueryOptions extends QueryCommon {
   names: string[];
 }
 
-async function modulesFor(opts: QueryCommon): Promise<string[]> {
-  if (opts.modules) return opts.modules;
+async function scanFor(opts: QueryCommon): Promise<{ modules: string[]; stale: boolean }> {
+  if (opts.modules) return { modules: opts.modules, stale: opts.stale ?? false };
   try {
-    return await discoverModules(opts.projectRoot);
+    const scan = await scanModules(opts.projectRoot);
+    return { modules: scan.built, stale: opts.stale ?? scan.stale };
   } catch {
-    return [];
+    return { modules: [], stale: true };
   }
 }
 
@@ -164,7 +194,7 @@ export async function runStatusQuery(opts: StatusQueryOptions): Promise<Record<s
   // Every requested name starts as unknown; real answers overwrite it below.
   for (const name of opts.names) result[name] = { name, state: "unknown", source: "none", updatedAt: now };
 
-  const modules = await modulesFor(opts);
+  const { modules, stale } = await scanFor(opts);
   if (modules.length === 0) return result;
 
   let queryFile: string;
@@ -174,7 +204,7 @@ export async function runStatusQuery(opts: StatusQueryOptions): Promise<Record<s
     return result;
   }
 
-  const exec = opts.exec ?? defaultExec;
+  const exec = opts.exec ?? treeExec;
   const timeoutMs = opts.timeoutMs ?? 120000;
   const resolve = moduleToFile.bind(null, opts.projectRoot);
 
@@ -200,6 +230,10 @@ export async function runStatusQuery(opts: StatusQueryOptions): Promise<Record<s
       if (rec) result[name] = recordToStatus(rec, now, resolve);
     }
   }
+  if (stale) {
+    // The name may live in a module that is not built (or built from older source): not finding it proves nothing.
+    for (const name of opts.names) if (result[name].state === "missing") result[name] = { name, state: "unknown", source: "none", updatedAt: now };
+  }
   return result;
 }
 
@@ -207,10 +241,10 @@ const compareStrings = (a: string, b: string): number => (a < b ? -1 : a > b ? 1
 
 export async function runListQuery(opts: QueryCommon & { prefix?: string }): Promise<DeclSummary[]> {
   try {
-    const modules = await modulesFor(opts);
+    const { modules } = await scanFor(opts);
     if (modules.length === 0 || opts.signal?.aborted) return [];
     const queryFile = await ensureQueryFile(opts.tmpDir);
-    const exec = opts.exec ?? defaultExec;
+    const exec = opts.exec ?? treeExec;
     const res = await exec(opts.lakePath, ["env", "lean", "--run", queryFile, "list", modules.join(","), opts.prefix ?? ""], {
       env: opts.env,
       cwd: opts.projectRoot,

@@ -92,6 +92,44 @@ describe("LeanPaneApiV1 provider", () => {
     expect(files.get(path.join(ROOT, "B.lean"))).toBe("import Foo\n\ntheorem x : sorry := by\n  sorry\n");
   });
 
+  it("createStub registers the stub as a live `stated` entry right away (the file need not be open or built)", async () => {
+    const { api } = setup();
+    await api.createStub("Proj", { file: "Proj/Proj/New.lean", name: "Proj.fresh", docstring: "d" });
+    expect((await api.getStatus("Proj", ["Proj.fresh"]))["Proj.fresh"]).toMatchObject({ state: "stated", source: "live", file: "Proj/Proj/New.lean", line: 1 });
+    expect((await api.listDeclarations("Proj")).find((d) => d.name === "Proj.fresh")).toMatchObject({ file: "Proj/Proj/New.lean", line: 1 });
+  });
+
+  it("createStub only writes .lean files inside the project (no other extension, outside paths, .. escapes, .lake, lakefile.lean)", async () => {
+    const { api, files } = setup();
+    const bad = ["Notes.md", "../Other/X.lean", path.join(VAULT, "Elsewhere", "X.lean"), "Proj/../../X.lean", ".lake/packages/dep/X.lean", "lakefile.lean", "X"];
+    for (const file of bad) await expect(api.createStub(ROOT, { file, name: "x", docstring: "" }), file).rejects.toThrow(/Cannot create a stub/);
+    expect(files.size).toBe(0);
+  });
+
+  it("createStub refuses existing names (in the file or the project) and invalid names", async () => {
+    const { api, files } = setup();
+    files.set(path.join(ROOT, "B.lean"), "theorem Proj.there : True := trivial\n");
+    await expect(api.createStub(ROOT, { file: "B.lean", name: "Proj.there", docstring: "" })).rejects.toThrow(/already declared/);
+    await expect(api.createStub(ROOT, { file: "C.lean", name: "Proj.ok", docstring: "" })).rejects.toThrow(/already exists in the project/);
+    await expect(api.createStub(ROOT, { file: "C.lean", name: "a\ntheorem evil", docstring: "" })).rejects.toThrow(/not a valid Lean declaration name/);
+    expect(files.has(path.join(ROOT, "C.lean"))).toBe(false);
+  });
+
+  it("createStub fails (and registers nothing) when the target is open read-only", async () => {
+    const { api } = setup({ writeFile: async () => { throw new Error("open read-only"); } });
+    await expect(api.createStub(ROOT, { file: "R.lean", name: "Proj.ro", docstring: "" })).rejects.toThrow(/read-only/);
+    expect((await api.getStatus("Proj", ["Proj.ro"]))["Proj.ro"].state).toBe("missing");
+  });
+
+  it("an untrusted project answers unknown / empty from the background API without spawning", async () => {
+    const queries: string[][] = [];
+    const engine = new StatusEngine({ isTrusted: () => false, runStatus: async (_r, n) => (queries.push(n), {}), runList: async () => (queries.push(["list"]), [{ name: "x", kind: "", file: "", line: 0 }]) });
+    const { api } = setup({ engine });
+    expect((await api.getStatus("Proj", ["Proj.ok"]))["Proj.ok"]).toMatchObject({ state: "unknown", source: "none" });
+    expect(await api.listDeclarations("Proj")).toEqual([]);
+    expect(queries).toEqual([]);
+  });
+
   it("onStatusChanged reports vault-relative roots and can be unsubscribed", async () => {
     const { api, engine } = setup();
     const seen: Array<[string, unknown]> = [];

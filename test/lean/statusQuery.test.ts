@@ -13,7 +13,10 @@ describeLean("status query against the real fixture project (Lean 4.25.1)", () =
   it("classifies missing / stated / proved-with-sorry-deps / proved / unknown module-less names", async () => {
     const names = ["StatusProj.not_there", "StatusProj.stated_sorry", "StatusProj.uses_sorry", "StatusProj.proved_add_zero", "StatusProj.double", "Nat.add_comm", "StatusProj.broken_type"];
     const res = await runStatusQuery({ ...common(), names });
-    expect(res["StatusProj.not_there"].state).toBe("missing");
+    // the fixture has unbuilt modules (Broken, Symbols): "not found" proves nothing there
+    expect(res["StatusProj.not_there"]).toMatchObject({ state: "unknown", source: "none" });
+    const upToDate = await runStatusQuery({ ...common(), names: ["StatusProj.not_there"], stale: false });
+    expect(upToDate["StatusProj.not_there"].state).toBe("missing");
     expect(res["StatusProj.stated_sorry"]).toMatchObject({ state: "stated", kind: "theorem", line: 14, source: "build" });
     expect(res["StatusProj.uses_sorry"].state).toBe("proved-with-sorry-deps");
     expect(res["StatusProj.proved_add_zero"]).toMatchObject({ state: "proved", line: 10 });
@@ -21,7 +24,7 @@ describeLean("status query against the real fixture project (Lean 4.25.1)", () =
     expect(res["StatusProj.proved_add_zero"].file).toMatch(/StatusProj[\\/]Basic\.lean$/);
     expect(res["StatusProj.double"]).toMatchObject({ state: "proved", kind: "def" });
     expect(res["Nat.add_comm"].state).toBe("proved"); // toolchain declaration: found, no sorry
-    expect(res["StatusProj.broken_type"].state).toBe("missing"); // declared only in the unbuilt Broken.lean
+    expect(res["StatusProj.broken_type"].state).toBe("unknown"); // declared only in the unbuilt Broken.lean
     expect(Object.keys(res).sort()).toEqual([...names].sort());
   });
 
@@ -51,7 +54,7 @@ describeLean("status query against the real fixture project (Lean 4.25.1)", () =
     const names = Array.from({ length: 250 }, (_, i) => `StatusProj.missing_${i}`).concat(["«weird name»", "Nat.«add_comm»"]);
     const res = await runStatusQuery({ ...common(), names });
     expect(Object.keys(res).length).toBe(names.length);
-    expect(res["StatusProj.missing_249"].state).toBe("missing");
+    expect(res["StatusProj.missing_249"].state).toBe("unknown");
     expect(res["Nat.«add_comm»"].state).toBe("proved");
   }, 120000);
 });

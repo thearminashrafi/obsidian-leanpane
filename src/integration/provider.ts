@@ -11,7 +11,8 @@ import * as path from "node:path";
 import type { DeclStatus, DeclSummary, LeanPaneApiV1, LeanProjectInfo } from "./api-types";
 import { API_VERSION } from "./api-types";
 import { describeProjectInfo } from "./projectInfo";
-import { appendStub, stubBlock } from "../core/lsp";
+import { appendStub, declaresName, isValidDeclName, stubBlock } from "../core/lsp";
+import { isInside } from "../core/paths";
 import type { StatusEngine } from "../core/statusEngine";
 import type { ProjectDescriptor } from "../types";
 
@@ -21,12 +22,12 @@ export interface ProviderDeps {
   /** Nearest Lean project for a DIRECTORY (absolute), or null. */
   findProject(dirAbs: string): Promise<ProjectDescriptor | null>;
   isDirectory(abs: string): Promise<boolean>;
-  engine: Pick<StatusEngine, "getStatus" | "listDeclarations" | "onStatusChanged">;
+  engine: Pick<StatusEngine, "getStatus" | "listDeclarations" | "onStatusChanged" | "registerPending">;
   /** Open the file at a 1-based line in LeanPane. Resolves false when the file cannot be opened. */
   openLocation(abs: string, line: number, opts: { newLeaf?: boolean; projectRoot: string }): Promise<boolean>;
   /** Current text of a Lean file (open editor buffer first), or null when it does not exist. */
   readFile(abs: string): Promise<string | null>;
-  /** Replace/create a Lean file's text (through the open editor when there is one). */
+  /** Replace/create a Lean file's text (through the open editor when there is one). Rejects when the file is only open read-only. */
   writeFile(abs: string, text: string): Promise<void>;
 }
 
@@ -84,10 +85,29 @@ export function createLeanPaneApi(deps: ProviderDeps): LeanPaneApiV1 {
 
     async createStub(projectRoot, req) {
       const root = absRoot(projectRoot);
+      if (!isValidDeclName(req.name)) throw new Error(`"${req.name}" is not a valid Lean declaration name.`);
       const abs = resolveStubFile(req.file, base(), root);
+      if (path.extname(abs).toLowerCase() !== ".lean") throw new Error(`Cannot create a stub in ${req.file}: not a .lean file.`);
+      if (!isInside(root, abs)) throw new Error(`Cannot create a stub in ${req.file}: the file is outside the Lean project.`);
+      const relParts = path.relative(root, abs).split(path.sep);
+      if (relParts[0] === ".lake" || (relParts.length === 1 && relParts[0] === "lakefile.lean"))
+        throw new Error(`Cannot create a stub in ${req.file}: that file is not part of the project's sources.`);
       const existing = (await deps.readFile(abs)) ?? "";
+      if (declaresName(existing, req.name)) throw new Error(`${req.name} is already declared in ${req.file}.`);
+      const known = (await deps.engine.getStatus(root, [req.name]))[req.name];
+      if (known && known.state !== "missing" && known.state !== "unknown") throw new Error(`${req.name} already exists in the project (${known.state}).`);
       const { text, line } = appendStub(existing, stubBlock(req.name, req.docstring));
       await deps.writeFile(abs, text);
+      // the file may not be open (so no live declarations): report the stub as `stated` right away
+      const range = { start: { line: line - 1, character: 0 }, end: { line: line + 1, character: 0 } };
+      deps.engine.registerPending(root, abs, {
+        name: req.name,
+        shortName: req.name.split(".").pop() ?? req.name,
+        symbolKind: 6,
+        range,
+        selectionRange: range,
+        state: "stated",
+      });
       return { file: toApiPath(abs) ?? abs, line };
     },
 
