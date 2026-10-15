@@ -1,3 +1,3 @@
-LeanPane 0.1.4
+LeanPane 0.1.5
 
-- Fix: the goals pane (including the Restart File button) is no longer covered by Obsidian's status bar.
+- Find (Cmd/Ctrl+F) now jumps to and selects the first match as you type, instead of waiting for Enter.

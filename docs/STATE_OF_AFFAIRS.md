@@ -1,6 +1,6 @@
 # LeanPane: state of affairs
 
-*Last updated 14 Oct 2026, version 0.1.4. Keep this file current: update it with every release (newest entry on top of the log).*
+*Last updated 14 Oct 2026, version 0.1.5. Keep this file current: update it with every release (newest entry on top of the log).*
 
 ## In one paragraph
 LeanPane is a **beta**. Editing `.lean` files with live errors, goals, hover, completion and Unicode input works and has been seen working in real Obsidian on macOS. The Lean projects panel, syntax colours and the interactive goal view were confirmed from screenshots. Several newer features (listed below) have only been tested automatically. Nobody other than the author has tried it yet.
@@ -40,6 +40,7 @@ The checklist is `docs/MANUAL_TEST.md`. Highest priority: delete from the panel,
 7. Plain-language help for common errors; a Unicode cheat sheet.
 
 ## Log (newest first)
+- **0.1.5** (14 Oct 2026): Cmd/Ctrl+F now jumps to and selects the first match while you type (no Enter needed).
 - **0.1.4** (14 Oct 2026): goals pane (and its Restart File button) no longer covered by Obsidian's status bar.
 - **0.1.3** (14 Oct 2026): the LaTeX blueprint is optional when creating a project (off by default) and can be added to an existing project later; tighter tree indentation.
 - **0.1.2** (14 Oct 2026): fixed missing syntax colours.
