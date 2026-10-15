@@ -4,7 +4,7 @@ Write Lean 4 inside your Obsidian vault. LeanPane adds a `.lean` editor with liv
 
 It is designed to pair with [TeXPane](https://github.com/thearminashrafi/obsidian-texpane), the LaTeX plugin: write the proof in LaTeX, tag each lemma with its Lean name blueprint-style (`\lean{Name}`, `\leanok`, `\uses{...}`, compatible with [leanblueprint](https://pypi.org/project/leanblueprint/)), and LeanPane reports what Lean has actually verified. Each plugin also works on its own.
 
-> **Beta.** Automatically tested (including against a real Lean server), but young. Full walkthrough: **[User guide](docs/USER_GUIDE.md)**. Problems: [open an issue](../../issues/new/choose).
+> **Beta.** Automatically tested (including against a real Lean server), but young. Full walkthrough: **[User guide](docs/USER_GUIDE.md)**. Current status and plans: [State of affairs](docs/STATE_OF_AFFAIRS.md). Problems: [open an issue](../../issues/new/choose).
 
 ## Requirements
 
